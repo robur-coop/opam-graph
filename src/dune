@@ -1,0 +1,4 @@
+(library
+ (name opam_graph)
+ (public_name opam-graph)
+ (libraries opam-core opam-format))

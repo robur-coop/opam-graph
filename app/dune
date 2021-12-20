@@ -1,0 +1,3 @@
+(executable
+ (name main)
+ (libraries cmdliner logs logs.fmt opam-graph))
