@@ -74,5 +74,38 @@ let dependencies (switch : OpamFile.SwitchExport.t) =
       in
       find_deps graph work
   in
-  let graph = find_deps graph (Name_set.singleton top) in
-  Format.printf "%a" pp_graph graph
+  find_deps graph (Name_set.singleton top)
+
+module Dot = struct
+
+  type t = Odot.graph
+
+  let of_graph (graph:graph) : t =
+    let open Odot in
+    let stmt_list =
+      Name_map.fold (fun pkg deps acc ->
+        let stmt =
+          let pkg_id = Double_quoted_id (OpamPackage.Name.to_string pkg) in
+          let pkg_point = Edge_node_id (pkg_id, None) in
+          let deps_points =
+            Name_set.elements deps
+            |> List.map (fun p -> 
+              let id = Double_quoted_id (OpamPackage.Name.to_string p) in
+              Edge_node_id (id, None)
+            )
+          in
+          let edge = pkg_point, deps_points, [] in
+          Stmt_edge edge
+        in
+        stmt :: acc
+      ) graph.nodes []
+    in
+    { strict = false; (*todo test params*)
+      kind = Digraph;
+      id = None;
+      stmt_list }
+
+  let pp ppf dot =
+    Format.fprintf ppf "%s" (Odot.string_of_graph dot)
+
+end
