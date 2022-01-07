@@ -29,6 +29,33 @@ let direct_dependencies (switch : OpamFile.SwitchExport.t) pkg =
   let set = filtered_formula_to_pkgs switch (OpamFile.OPAM.depends opam) in
   filtered_formula_to_pkgs switch ~set (OpamFile.OPAM.depopts opam)
 
+let transitive_dependencies (switch : OpamFile.SwitchExport.t) pkg =
+  let available = switch.selections.sel_installed in
+  let rec aux pkg seen_pkgs = 
+    let opam = opam switch pkg in
+    let set = filtered_formula_to_pkgs switch (OpamFile.OPAM.depends opam) in
+    let set = filtered_formula_to_pkgs switch ~set (OpamFile.OPAM.depopts opam) in
+    let transitive_set =
+      let filtered_set =
+        set
+        |> Name_set.filter (fun name ->
+          OpamPackage.Set.exists
+            (fun pkg -> pkg.OpamPackage.name = name)
+            available
+          && not (Name_set.mem name seen_pkgs)
+        )
+      in
+      let seen_pkgs = Name_set.union seen_pkgs filtered_set
+      in
+      filtered_set
+      |> Name_set.elements
+      |> List.concat_map (fun pkg -> aux pkg seen_pkgs |> Name_set.elements)
+      |> Name_set.of_list
+    in
+    Name_set.union set transitive_set
+  in
+  aux pkg Name_set.empty
+
 module Name_map = OpamPackage.Name.Map
 
 type graph = {
@@ -49,7 +76,7 @@ let pp_graph ppf graph =
                                (Name_set.elements deps))))
     graph.nodes
 
-let dependencies (switch : OpamFile.SwitchExport.t) =
+let dependencies ?(transitive=false) (switch : OpamFile.SwitchExport.t) =
   let root_pkg = root switch in
   let top = root_pkg.OpamPackage.name in
   let graph = { top ; nodes = Name_map.empty } in
@@ -58,7 +85,10 @@ let dependencies (switch : OpamFile.SwitchExport.t) =
     match Name_set.choose_opt work with
     | None -> graph
     | Some x ->
-      let deps = direct_dependencies switch x in
+      let deps = match transitive with
+        | true -> transitive_dependencies switch x 
+        | false -> direct_dependencies switch x
+      in
       let deps =
         Name_set.filter (fun name ->
             OpamPackage.Set.exists
