@@ -27,6 +27,10 @@ let () =
       let graph = Opam_graph.dependencies data in
       let dot = Opam_graph.Dot.of_graph graph in
       Format.printf "%a" Opam_graph.Dot.pp dot
+    | "dot_proto_ui" ->
+      let graph = Opam_graph.Ui_prototype.dependencies data in
+      let dot = Opam_graph.Dot.of_graph graph in
+      Format.printf "%a" Opam_graph.Dot.pp dot
     | _ -> failwith "Unsupported output format"
   )
   | _ ->

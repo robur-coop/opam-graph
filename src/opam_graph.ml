@@ -25,9 +25,16 @@ let opam (switch : OpamFile.SwitchExport.t) pkg_name =
 (* TODO build / dev packages *)
 (* TODO constraints (os = "linux") *)
 let direct_dependencies (switch : OpamFile.SwitchExport.t) pkg =
+  let available = switch.selections.sel_installed in
   let opam = opam switch pkg in
   let set = filtered_formula_to_pkgs switch (OpamFile.OPAM.depends opam) in
   filtered_formula_to_pkgs switch ~set (OpamFile.OPAM.depopts opam)
+  |> Name_set.filter (fun name ->
+    OpamPackage.Set.exists
+      (fun pkg -> pkg.OpamPackage.name = name)
+      available
+  )
+
 
 let transitive_dependencies (switch : OpamFile.SwitchExport.t) pkg =
   let available = switch.selections.sel_installed in
@@ -89,13 +96,6 @@ let dependencies ?(transitive=false) (switch : OpamFile.SwitchExport.t) =
         | true -> transitive_dependencies switch x 
         | false -> direct_dependencies switch x
       in
-      let deps =
-        Name_set.filter (fun name ->
-            OpamPackage.Set.exists
-              (fun pkg -> pkg.OpamPackage.name = name)
-              available)
-          deps
-      in
       let graph = add_node graph x deps in
       let work =
         Name_set.diff
@@ -137,5 +137,12 @@ module Dot = struct
 
   let pp ppf dot =
     Format.fprintf ppf "%s" (Odot.string_of_graph dot)
+
+end
+
+module Ui_prototype = struct
+
+  let dependencies data =
+    failwith "todo"
 
 end
