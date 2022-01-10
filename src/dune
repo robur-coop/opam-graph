@@ -1,6 +1,6 @@
 (library
  (name opam_graph)
  (public_name opam-graph)
- (libraries opam-core opam-format dot)
+ (libraries opam-core opam-format dot rresult)
  (flags (:standard (-w -27-26)))
  )
