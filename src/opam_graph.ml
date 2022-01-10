@@ -18,28 +18,21 @@ let filtered_formula_to_pkgs (_switch : OpamFile.SwitchExport.t)
     ?(set = Name_set.empty) formula =
   OpamFormula.fold_left (fun acc (name, _) -> Name_set.add name acc) set formula
 
-let opam (switch : OpamFile.SwitchExport.t) pkg_name =
+let opam_file (switch : OpamFile.SwitchExport.t) pkg_name =
   OpamPackage.Name.Map.find pkg_name switch.overlays
 
 (* TODO depexts *)
 (* TODO build / dev packages *)
 (* TODO constraints (os = "linux") *)
 let direct_dependencies (switch : OpamFile.SwitchExport.t) pkg =
-  let available = switch.selections.sel_installed in
-  let opam = opam switch pkg in
-  let set = filtered_formula_to_pkgs switch (OpamFile.OPAM.depends opam) in
-  filtered_formula_to_pkgs switch ~set (OpamFile.OPAM.depopts opam)
-  |> Name_set.filter (fun name ->
-    OpamPackage.Set.exists
-      (fun pkg -> pkg.OpamPackage.name = name)
-      available
-  )
-
+  let pkg_opam_file = opam_file switch pkg in
+  let set = filtered_formula_to_pkgs switch (OpamFile.OPAM.depends pkg_opam_file) in
+  filtered_formula_to_pkgs switch ~set (OpamFile.OPAM.depopts pkg_opam_file)
 
 let transitive_dependencies (switch : OpamFile.SwitchExport.t) pkg =
   let available = switch.selections.sel_installed in
   let rec aux pkg seen_pkgs = 
-    let opam = opam switch pkg in
+    let opam = opam_file switch pkg in
     let set = filtered_formula_to_pkgs switch (OpamFile.OPAM.depends opam) in
     let set = filtered_formula_to_pkgs switch ~set (OpamFile.OPAM.depopts opam) in
     let transitive_set =
@@ -84,6 +77,7 @@ let pp_graph ppf graph =
     graph.nodes
 
 let dependencies ?(transitive=false) (switch : OpamFile.SwitchExport.t) =
+  let available = switch.selections.sel_installed in
   let root_pkg = root switch in
   let top = root_pkg.OpamPackage.name in
   let graph = { top ; nodes = Name_map.empty } in
@@ -95,6 +89,14 @@ let dependencies ?(transitive=false) (switch : OpamFile.SwitchExport.t) =
       let deps = match transitive with
         | true -> transitive_dependencies switch x 
         | false -> direct_dependencies switch x
+      in
+      let deps =
+        deps
+        |> Name_set.filter (fun name ->
+          OpamPackage.Set.exists
+            (fun pkg -> pkg.OpamPackage.name = name)
+            available
+        )
       in
       let graph = add_node graph x deps in
       let work =
@@ -135,6 +137,34 @@ module Dot = struct
       id = None;
       stmt_list }
 
+  type assoc_graph = (string * (string list)) list
+  
+  let of_assoc (graph:assoc_graph) : t =
+    let open Odot in
+    let stmt_list =
+      graph
+      |> List.fold_left (fun acc (pkg, deps) ->
+        let stmt =
+          let pkg_id = Double_quoted_id pkg in
+          let pkg_point = Edge_node_id (pkg_id, None) in
+          let deps_points =
+            deps
+            |> List.map (fun pkg -> 
+              let id = Double_quoted_id pkg in
+              Edge_node_id (id, None)
+            )
+          in
+          let edge = pkg_point, deps_points, [] in
+          Stmt_edge edge
+        in
+        stmt :: acc
+      ) [] 
+    in
+    { strict = false; (*todo test params*)
+      kind = Digraph;
+      id = None;
+      stmt_list }
+
   let pp ppf dot =
     Format.fprintf ppf "%s" (Odot.string_of_graph dot)
 
@@ -142,7 +172,49 @@ end
 
 module Ui_prototype = struct
 
-  let dependencies data =
-    failwith "todo"
+  let dependencies ?(transitive=true) data =
+    let all_direct_deps = dependencies data in
+    let top = all_direct_deps.top in
+    let top_str = OpamPackage.Name.to_string top
+    in
+    let direct_deps = 
+      all_direct_deps.nodes
+      |> Name_map.find top
+    in
+    let all_transitive_deps =
+      dependencies ~transitive data in
+    let direct_deps_w_transitive_deps =
+      direct_deps
+      |> Name_set.elements
+      |> List.map (fun direct_dep ->
+        let transitive_deps =
+          all_transitive_deps.nodes
+          |> Name_map.find_opt direct_dep
+          |> (function
+          | None -> Name_set.empty
+          | Some v -> v)
+          |> Name_set.elements
+          |> List.map OpamPackage.Name.to_string 
+        in
+        let direct_dep = OpamPackage.Name.to_string direct_dep in
+        direct_dep, transitive_deps
+      )
+    in
+    let uniquified_deps =
+      direct_deps_w_transitive_deps
+      |> List.mapi (fun i (direct_dep, transitive_deps) ->
+        let unique_direct_dep = Printf.sprintf "%s_%d" direct_dep i in
+        let unique_transitive_deps =
+          transitive_deps
+          |> List.mapi (fun i' transitive_dep ->
+            Printf.sprintf "%s_%d.%d" transitive_dep i i'
+          )
+        in
+        unique_direct_dep, unique_transitive_deps
+      )
+    in
+    let unique_direct_deps = uniquified_deps |> List.map fst
+    in
+    (top_str, unique_direct_deps) :: uniquified_deps
 
 end

@@ -27,9 +27,15 @@ let () =
       let graph = Opam_graph.dependencies data in
       let dot = Opam_graph.Dot.of_graph graph in
       Format.printf "%a" Opam_graph.Dot.pp dot
-    | "dot_proto_ui" ->
-      let graph = Opam_graph.Ui_prototype.dependencies data in
-      let dot = Opam_graph.Dot.of_graph graph in
+    | "proto_ui_transitive" ->
+      let transitive = true in
+      let graph = Opam_graph.Ui_prototype.dependencies ~transitive data in
+      let dot = Opam_graph.Dot.of_assoc graph in
+      Format.printf "%a" Opam_graph.Dot.pp dot
+    | "proto_ui" ->
+      let transitive = false in
+      let graph = Opam_graph.Ui_prototype.dependencies ~transitive data in
+      let dot = Opam_graph.Dot.of_assoc graph in
       Format.printf "%a" Opam_graph.Dot.pp dot
     | _ -> failwith "Unsupported output format"
   )
