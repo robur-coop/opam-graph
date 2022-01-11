@@ -25,18 +25,28 @@ let () =
       Format.printf "%a" Opam_graph.pp_graph graph
     | "dot" ->
       let graph = Opam_graph.dependencies data in
-      let dot = Opam_graph.Dot.of_graph graph in
-      Format.printf "%a" Opam_graph.Dot.pp dot
-    | "proto_ui_transitive" ->
-      let transitive = true in
-      let graph = Opam_graph.Ui_prototype.dependencies ~transitive data in
-      let dot = Opam_graph.Dot.of_assoc graph in
-      Format.printf "%a" Opam_graph.Dot.pp dot
-    | "proto_ui" ->
+      let dot = Opam_graph.Render.Dot.of_graph graph in
+      Format.printf "%a" Opam_graph.Render.Dot.pp dot
+    | "dot_ui" ->
       let transitive = false in
-      let graph = Opam_graph.Ui_prototype.dependencies ~transitive data in
-      let dot = Opam_graph.Dot.of_assoc graph in
-      Format.printf "%a" Opam_graph.Dot.pp dot
+      let graph = Opam_graph.Ui.dependencies ~transitive data in
+      let dot = Opam_graph.Render.Dot.of_assoc graph in
+      Format.printf "%a" Opam_graph.Render.Dot.pp dot
+    | "dot_ui_transitive" ->
+      let transitive = true in
+      let graph = Opam_graph.Ui.dependencies ~transitive data in
+      let dot = Opam_graph.Render.Dot.of_assoc graph in
+      Format.printf "%a" Opam_graph.Render.Dot.pp dot
+    | "html_ui" ->
+      let transitive = false in
+      let graph = Opam_graph.Ui.dependencies ~transitive data in
+      let html = Opam_graph.Render.Html.of_assoc graph in
+      Format.printf "%a" Opam_graph.Render.Html.pp html
+    | "html_ui_transitive" ->
+      let transitive = true in
+      let graph = Opam_graph.Ui.dependencies ~transitive data in
+      let html = Opam_graph.Render.Html.of_assoc graph in
+      Format.printf "%a" Opam_graph.Render.Html.pp html
     | _ -> failwith "Unsupported output format"
   )
   | _ ->

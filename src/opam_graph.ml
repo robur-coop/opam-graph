@@ -108,71 +108,13 @@ let dependencies ?(transitive=false) (switch : OpamFile.SwitchExport.t) =
   in
   find_deps graph (Name_set.singleton top)
 
-module Dot = struct
-
-  type t = Odot.graph
-
-  let of_graph (graph:graph) : t =
-    let open Odot in
-    let stmt_list =
-      Name_map.fold (fun pkg deps acc ->
-        let stmt =
-          let pkg_id = Double_quoted_id (OpamPackage.Name.to_string pkg) in
-          let pkg_point = Edge_node_id (pkg_id, None) in
-          let deps_points =
-            Name_set.elements deps
-            |> List.map (fun p -> 
-              let id = Double_quoted_id (OpamPackage.Name.to_string p) in
-              Edge_node_id (id, None)
-            )
-          in
-          let edge = pkg_point, deps_points, [] in
-          Stmt_edge edge
-        in
-        stmt :: acc
-      ) graph.nodes []
-    in
-    { strict = false; (*todo test params*)
-      kind = Digraph;
-      id = None;
-      stmt_list }
-
-  type assoc_graph = (string * (string list)) list
+(*!Note the first entry is seen as the top node*)
+type assoc_graph = (string * (string list)) list
   
-  let of_assoc (graph:assoc_graph) : t =
-    let open Odot in
-    let stmt_list =
-      graph
-      |> List.fold_left (fun acc (pkg, deps) ->
-        let stmt =
-          let pkg_id = Double_quoted_id pkg in
-          let pkg_point = Edge_node_id (pkg_id, None) in
-          let deps_points =
-            deps
-            |> List.map (fun pkg -> 
-              let id = Double_quoted_id pkg in
-              Edge_node_id (id, None)
-            )
-          in
-          let edge = pkg_point, deps_points, [] in
-          Stmt_edge edge
-        in
-        stmt :: acc
-      ) [] 
-    in
-    { strict = false; (*todo test params*)
-      kind = Digraph;
-      id = None;
-      stmt_list }
+module Ui = struct
 
-  let pp ppf dot =
-    Format.fprintf ppf "%s" (Odot.string_of_graph dot)
-
-end
-
-module Ui_prototype = struct
-
-  let dependencies ?(transitive=true) data =
+  let dependencies ?(transitive=true) data : assoc_graph =
+    (*> todo can be made more efficient*)
     let all_direct_deps = dependencies data in
     let top = all_direct_deps.top in
     let top_str = OpamPackage.Name.to_string top
@@ -181,6 +123,7 @@ module Ui_prototype = struct
       all_direct_deps.nodes
       |> Name_map.find top
     in
+    (*> todo can be made more efficient*)
     let all_transitive_deps =
       dependencies ~transitive data in
     let direct_deps_w_transitive_deps =
@@ -217,4 +160,99 @@ module Ui_prototype = struct
     in
     (top_str, unique_direct_deps) :: uniquified_deps
 
+end
+
+module Render = struct 
+
+  module Dot = struct
+
+    type t = Odot.graph
+
+    let of_graph (graph:graph) : t =
+      let open Odot in
+      let stmt_list =
+        Name_map.fold (fun pkg deps acc ->
+          let stmt =
+            let pkg_id = Double_quoted_id (OpamPackage.Name.to_string pkg) in
+            let pkg_point = Edge_node_id (pkg_id, None) in
+            let deps_points =
+              Name_set.elements deps
+              |> List.map (fun p -> 
+                let id = Double_quoted_id (OpamPackage.Name.to_string p) in
+                Edge_node_id (id, None)
+              )
+            in
+            let edge = pkg_point, deps_points, [] in
+            Stmt_edge edge
+          in
+          stmt :: acc
+        ) graph.nodes []
+      in
+      { strict = false; (*todo test params*)
+        kind = Digraph;
+        id = None;
+        stmt_list }
+
+    let of_assoc (graph:assoc_graph) : t =
+      let open Odot in
+      let stmt_list =
+        graph
+        |> List.fold_left (fun acc (pkg, deps) ->
+          let stmt =
+            let pkg_id = Double_quoted_id pkg in
+            let pkg_point = Edge_node_id (pkg_id, None) in
+            let deps_points =
+              deps
+              |> List.map (fun pkg -> 
+                let id = Double_quoted_id pkg in
+                Edge_node_id (id, None)
+              )
+            in
+            let edge = pkg_point, deps_points, [] in
+            Stmt_edge edge
+          in
+          stmt :: acc
+        ) [] 
+      in
+      { strict = false; (*todo test params*)
+        kind = Digraph;
+        id = None;
+        stmt_list }
+
+    let pp ppf dot =
+      Format.fprintf ppf "%s" (Odot.string_of_graph dot)
+
+  end
+
+  module Svg = struct
+
+    type t = Tyxml_svg.doc
+
+    let css = {|
+      
+|}
+    
+    let of_assoc (graph:assoc_graph) : t =
+      failwith "todo"
+
+    let pp ppf html =
+      Format.fprintf ppf "%a@." (Tyxml_svg.pp ()) html
+
+  end
+  
+  module Html = struct
+
+    (*goto - include css + svg, like treemap
+      .. also supporting separation of these so consumer can construct own html
+    *)
+
+    type t = Tyxml_html.doc
+
+    let of_assoc (graph:assoc_graph) : t = failwith "todo"
+
+    let pp ppf html =
+      Format.fprintf ppf "%a@." (Tyxml_html.pp ()) html
+    
+  end
+  
 end
