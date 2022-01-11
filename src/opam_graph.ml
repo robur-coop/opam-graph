@@ -228,12 +228,64 @@ module Render = struct
 
     type t = Tyxml_svg.doc
 
+    module Svg = Tyxml_svg
+
+    (*> goto
+      * change svg width+height to pct again - using vw+vh for development
+      * svg width+height shouldn't be here for compatibility with user css?
+    *)
     let css = {|
+
+svg {
+  width : 100vw;
+  height : 100vh;
+}
       
 |}
-    
+
+    type position = {
+      x : float;
+      y : float;
+    }
+
+    module Unit = struct
+
+      let none size = size, None
+
+    end
+
+    (*goto pass data or preformatted string *)
+    let make_title =
+      let s = Format.asprintf "foo" in
+      Svg.(title (txt s))
+
+    let make_circle ~pos ~radius =
+      Svg.[
+        circle ~a:[
+          a_class ["node_circle"];
+          a_cx @@ Unit.none pos.x;
+          a_cy @@ Unit.none pos.y;
+          a_r @@ Unit.none radius;
+        ] []
+      ]
+
+    let make_node ~pos ~radius =
+      let title = make_title in
+      Svg.g
+        ~a:[Svg.a_class ["node"]]
+        (title :: make_circle ~pos ~radius)
+
     let of_assoc (graph:assoc_graph) : t =
-      failwith "todo"
+      match graph with
+      | [] -> Tyxml_svg.svg []
+      | (top, direct_deps) :: layer2_deps ->
+        let top_svg =
+          let pos = { x = 0.5; y = 0.5 } in
+          let radius = 0.1 in
+          make_node ~pos ~radius
+        in
+        let a = [ Svg.a_viewBox (0., 0., 1., 1.) ] in
+        Svg.svg ~a [ top_svg ]
 
     let pp ppf html =
       Format.fprintf ppf "%a@." (Tyxml_svg.pp ()) html
@@ -242,13 +294,18 @@ module Render = struct
   
   module Html = struct
 
-    (*goto - include css + svg, like treemap
-      .. also supporting separation of these so consumer can construct own html
-    *)
+    module H = Tyxml_html
 
-    type t = Tyxml_html.doc
+    type t = H.doc
 
-    let of_assoc (graph:assoc_graph) : t = failwith "todo"
+    let of_assoc (graph:assoc_graph) : t =
+      let svg = Svg.of_assoc graph in
+      H.html
+        (H.head
+            (H.title (H.txt "Dependencies"))
+            [H.style [H.Unsafe.data Svg.css]]
+        )
+        (H.body [ H.svg [ svg ] ])
 
     let pp ppf html =
       Format.fprintf ppf "%a@." (Tyxml_html.pp ()) html
