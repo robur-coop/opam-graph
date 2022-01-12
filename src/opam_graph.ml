@@ -254,6 +254,12 @@ module Render = struct
 svg {
   width : 100vw;
   height : 100vh;
+  background : brown;
+}
+
+line {
+  stroke-width: 0.005;
+  stroke: bisque;
 }
       
 |}
@@ -289,11 +295,23 @@ svg {
       let a = [ Svg.a_class ("node" :: classes) ] in
       Svg.g ~a (title :: make_circle ~pos ~radius)
 
-    let center = { x = 0.5; y = 0.5 }
+    let make_line ~pos0 ~pos1 =
+      Svg.(line ~a:[
+        a_x1 @@ Unit.none pos0.x;
+        a_y1 @@ Unit.none pos0.y;
+        a_x2 @@ Unit.none pos1.x;
+        a_y2 @@ Unit.none pos1.y;
+      ]) []
+
+    let make_edge ~pos0 ~pos1 ~classes =
+      let a = [ Svg.a_class ("edge" :: classes) ] in
+      Svg.g ~a [ make_line ~pos0 ~pos1 ]
     
+    (*goto move up to top ? *)
+    let center = { x = 0.5; y = 0.5 }
     let root_radius = 0.015 
     
-    let make_direct_deps ~deps_w_positions =
+    let make_direct_deps_nodes ~deps_w_positions =
       deps_w_positions |> List.map (fun ((dep, pos), layer2_deps) ->
         let radius = root_radius *. 0.7
         and text =
@@ -302,7 +320,15 @@ svg {
         and classes = [ dep.name; "direct_dep" ] in
         make_node ~pos ~radius ~text ~classes
       )
-    
+
+    let make_direct_deps_edges ~deps_w_positions =
+      deps_w_positions |> List.map (fun ((dep, pos), layer2_deps) ->
+        let pos0 = center in
+        let pos1 = pos in
+        let classes = [ dep.name; "direct_dep" ] in
+        make_edge ~pos0 ~pos1 ~classes
+      )
+
     (*goto define both direct and layer2 deps here 
       * all nodes should be laid out in the same list
       * could visualize layer2-deps as a spiral of dots 
@@ -322,13 +348,13 @@ svg {
           ((dep, { x; y }), layer2_deps)
         )
       in
-      let direct_deps_nodes = make_direct_deps ~deps_w_positions in
-      let direct_deps_edges = [] in
+      let direct_deps_nodes = make_direct_deps_nodes ~deps_w_positions in
+      let direct_deps_edges = make_direct_deps_edges ~deps_w_positions in
       let layer2_deps_nodes = [] in
       let layer2_deps_edges = []
       in
-      direct_deps_nodes @ direct_deps_edges @
-      layer2_deps_nodes @ layer2_deps_edges
+      direct_deps_edges @ direct_deps_nodes @
+      layer2_deps_edges @ layer2_deps_nodes
     
     let of_assoc (graph:assoc_graph) : t =
       match graph with
@@ -345,7 +371,7 @@ svg {
         in
         let deps_svgs = make_deps layer2_deps in
         let a = [ Svg.a_viewBox (0., 0., 1., 1.) ] in
-        Svg.svg ~a (root_svg :: deps_svgs)
+        Svg.svg ~a (deps_svgs @ [ root_svg ])
 
     let pp ppf html =
       Format.fprintf ppf "%a@." (Tyxml_svg.pp ()) html
