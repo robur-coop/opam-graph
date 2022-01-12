@@ -315,7 +315,8 @@ line {
       deps_w_positions |> List.map (fun ((dep, pos), layer2_deps) ->
         let radius = root_radius *. 0.7
         and text =
-          sprintf "%s\nDependencies: %d"
+          sprintf "Direct dependency: %s\nDependencies: %d"
+            (*< goto choose between transitive/direct*)
             dep.name (List.length layer2_deps)
         and classes = [ dep.name; "direct_dep" ] in
         make_node ~pos ~radius ~text ~classes
