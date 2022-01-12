@@ -261,8 +261,13 @@ line {
   stroke-width: 0.005;
   stroke: bisque;
 }
+
+.layer2_deps_bg {
+  fill: url(#gradient_01);
+}
       
 |}
+    (* a_fill @@ `Color ("url(#gradient_01)", None); *)
 
     type position = {
       x : float;
@@ -347,21 +352,32 @@ line {
             in
             let dot_radius = root_radius *. 0.2
             in
-            layer2_deps |> List.mapi (fun i' layer2_dep ->
-              let i' = float i' +. 5.5 in
-              let pos_radius = sqrt i' *. 0.010 -. 0.019 in
-              let angle_diff = sqrt i' *. Float.two_pi *. 0.05 in
-              let pos_angle = i' *. angle_diff in
-              let pos_rel =
-                V2.v pos_radius pos_angle
-                |> V2.of_polar
-              in
-              let pos = V2.(layer2_deps_center + pos_rel) in
-              let pos = { x = V2.x pos; y = V2.y pos } in
-              let text = layer2_dep.name in
-              let classes = [ layer2_dep.name; "layer2_dep" ] in
-              make_node ~pos ~radius:dot_radius ~text ~classes
-            )
+            let nodes =
+              layer2_deps |> List.mapi (fun i' layer2_dep ->
+                let i' = float i' +. 5.5 in
+                let pos_radius = sqrt i' *. 0.012 -. 0.024 in
+                let angle_diff = sqrt i' *. Float.two_pi *. 0.055 in
+                let pos_angle = i' *. angle_diff in
+                let pos_rel =
+                  V2.v pos_radius pos_angle
+                  |> V2.of_polar
+                in
+                let pos = V2.(layer2_deps_center + pos_rel) in
+                let pos = { x = V2.x pos; y = V2.y pos } in
+                let text = layer2_dep.name in
+                let classes = [ layer2_dep.name; "layer2_dep" ] in
+                make_node ~pos ~radius:dot_radius ~text ~classes
+              )
+            in
+            let bg =
+              let pos =
+                { x = V2.x layer2_deps_center; y = V2.y layer2_deps_center }
+              and radius = float (List.length layer2_deps) *. 0.003 
+              and text = ""
+              and classes = [ "layer2_deps_bg" ] in
+              make_node ~pos ~radius ~text ~classes
+            in
+            bg :: nodes
         )
       |> List.flatten
 
@@ -407,7 +423,25 @@ line {
         in
         let deps_svgs = make_deps layer2_deps in
         let a = [ Svg.a_viewBox (0., 0., 1., 1.) ] in
-        Svg.svg ~a (deps_svgs @ [ root_svg ])
+        let svg_defs =Svg.[ defs [
+          radialGradient ~a:[
+            a_id "gradient_01";
+            a_cx @@ Unit.none 0.5;
+            a_cy @@ Unit.none 0.5;
+            a_r @@ Unit.none 0.5;
+          ] [
+            stop ~a:[
+              a_offset @@ `Percentage 0.;
+              a_stop_color "bisque"
+            ] [];
+            stop ~a:[
+              a_offset @@ `Percentage 100.;
+              a_stop_color "bisque"; a_stop_opacity 0.
+            ] []
+          ]
+        ]]
+        in
+        Svg.svg ~a (svg_defs @ deps_svgs @ [ root_svg ])
 
     let pp ppf html =
       Format.fprintf ppf "%a@." (Tyxml_svg.pp ()) html
