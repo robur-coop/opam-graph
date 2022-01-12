@@ -332,19 +332,25 @@ line {
 
     let make_layer2_deps_nodes ~deps_w_positions =
       let open Gg in
-      deps_w_positions |> List.concat_map
-        (fun ((_, direct_dep_pos), layer2_deps) ->
+      deps_w_positions |> List.mapi
+        (fun i ((_, direct_dep_pos), layer2_deps) ->
             let layer2_deps_center =
               let direct_dep_pos = V2.(v direct_dep_pos.x direct_dep_pos.y) in
               let center = V2.v center.x center.y in
-              V2.(1.5 * (direct_dep_pos - center) + center)
+              let mult =
+                if i mod 2 = 0 then
+                  2.14
+                else
+                  1.5
+              in
+              V2.(mult * (direct_dep_pos - center) + center)
             in
             let dot_radius = root_radius *. 0.2
             in
             layer2_deps |> List.mapi (fun i' layer2_dep ->
-              let i' = float i' in
-              let angle_diff = Float.two_pi /. (20. -. i' *. 0.3) in
-              let pos_radius = i' *. 0.002 in
+              let i' = float i' +. 5.5 in
+              let pos_radius = sqrt i' *. 0.010 -. 0.019 in
+              let angle_diff = sqrt i' *. Float.two_pi *. 0.05 in
               let pos_angle = i' *. angle_diff in
               let pos_rel =
                 V2.v pos_radius pos_angle
@@ -357,6 +363,7 @@ line {
               make_node ~pos ~radius:dot_radius ~text ~classes
             )
         )
+      |> List.flatten
 
     (*goto define both direct and layer2 deps here 
       * all nodes should be laid out in the same list
