@@ -330,6 +330,34 @@ line {
         make_edge ~pos0 ~pos1 ~classes
       )
 
+    let make_layer2_deps_nodes ~deps_w_positions =
+      let open Gg in
+      deps_w_positions |> List.concat_map
+        (fun ((_, direct_dep_pos), layer2_deps) ->
+            let layer2_deps_center =
+              let direct_dep_pos = V2.(v direct_dep_pos.x direct_dep_pos.y) in
+              let center = V2.v center.x center.y in
+              V2.(1.5 * (direct_dep_pos - center) + center)
+            in
+            let dot_radius = root_radius *. 0.2
+            in
+            layer2_deps |> List.mapi (fun i' layer2_dep ->
+              let i' = float i' in
+              let angle_diff = Float.two_pi /. (20. -. i' *. 0.3) in
+              let pos_radius = i' *. 0.002 in
+              let pos_angle = i' *. angle_diff in
+              let pos_rel =
+                V2.v pos_radius pos_angle
+                |> V2.of_polar
+              in
+              let pos = V2.(layer2_deps_center + pos_rel) in
+              let pos = { x = V2.x pos; y = V2.y pos } in
+              let text = layer2_dep.name in
+              let classes = [ layer2_dep.name; "layer2_dep" ] in
+              make_node ~pos ~radius:dot_radius ~text ~classes
+            )
+        )
+
     (*goto define both direct and layer2 deps here 
       * all nodes should be laid out in the same list
       * could visualize layer2-deps as a spiral of dots 
@@ -351,7 +379,7 @@ line {
       in
       let direct_deps_nodes = make_direct_deps_nodes ~deps_w_positions in
       let direct_deps_edges = make_direct_deps_edges ~deps_w_positions in
-      let layer2_deps_nodes = [] in
+      let layer2_deps_nodes = make_layer2_deps_nodes ~deps_w_positions in
       let layer2_deps_edges = []
       in
       direct_deps_edges @ direct_deps_nodes @
