@@ -1,3 +1,6 @@
+
+let sprintf = Printf.sprintf
+
 module Set = OpamPackage.Set
 
 type package = OpamPackage.t
@@ -108,20 +111,24 @@ let dependencies ?(transitive=false) (switch : OpamFile.SwitchExport.t) =
   in
   find_deps graph (Name_set.singleton top)
 
-(*!Note the first entry is seen as the top node*)
-type assoc_graph = (string * (string list)) list
+(*!Note the first entry is seen as the root node*)
+type assoc_node = {
+  name : string;
+  uniqueness_postfix : string;
+}
+type assoc_graph = (assoc_node * (assoc_node list)) list
   
 module Ui = struct
 
   let dependencies ?(transitive=true) data : assoc_graph =
     (*> todo can be made more efficient*)
     let all_direct_deps = dependencies data in
-    let top = all_direct_deps.top in
-    let top_str = OpamPackage.Name.to_string top
+    let root = all_direct_deps.top in
+    let root_str = OpamPackage.Name.to_string root
     in
     let direct_deps = 
       all_direct_deps.nodes
-      |> Name_map.find top
+      |> Name_map.find root
     in
     (*> todo can be made more efficient*)
     let all_transitive_deps =
@@ -146,19 +153,24 @@ module Ui = struct
     let uniquified_deps =
       direct_deps_w_transitive_deps
       |> List.mapi (fun i (direct_dep, transitive_deps) ->
-        let unique_direct_dep = Printf.sprintf "%s_%d" direct_dep i in
-        let unique_transitive_deps =
+        let direct_dep_node = {
+          name = direct_dep;
+          uniqueness_postfix = sprintf "%d" i;
+        }
+        and unique_transitive_deps =
           transitive_deps
           |> List.mapi (fun i' transitive_dep ->
-            Printf.sprintf "%s_%d.%d" transitive_dep i i'
+            let uniqueness_postfix = sprintf "%d.%d" i i' in
+            { name = transitive_dep; uniqueness_postfix }
           )
         in
-        unique_direct_dep, unique_transitive_deps
+        direct_dep_node, unique_transitive_deps
       )
     in
-    let unique_direct_deps = uniquified_deps |> List.map fst
+    let unique_direct_deps = uniquified_deps |> List.map fst in
+    let root_node = { name = root_str; uniqueness_postfix = "" }
     in
-    (top_str, unique_direct_deps) :: uniquified_deps
+    (root_node, unique_direct_deps) :: uniquified_deps
 
 end
 
@@ -193,18 +205,21 @@ module Render = struct
         id = None;
         stmt_list }
 
+    let id_of_assoc_node node =
+      sprintf "%s_%s" node.name node.uniqueness_postfix
+    
     let of_assoc (graph:assoc_graph) : t =
       let open Odot in
       let stmt_list =
         graph
         |> List.fold_left (fun acc (pkg, deps) ->
           let stmt =
-            let pkg_id = Double_quoted_id pkg in
+            let pkg_id = Double_quoted_id (id_of_assoc_node pkg) in
             let pkg_point = Edge_node_id (pkg_id, None) in
             let deps_points =
               deps
               |> List.map (fun pkg -> 
-                let id = Double_quoted_id pkg in
+                let id = Double_quoted_id (id_of_assoc_node pkg) in
                 Edge_node_id (id, None)
               )
             in
@@ -255,8 +270,8 @@ svg {
     end
 
     (*goto pass data or preformatted string *)
-    let make_title =
-      let s = Format.asprintf "foo" in
+    let make_title ~text =
+      let s = sprintf "%s" text in
       Svg.(title (txt s))
 
     let make_circle ~pos ~radius =
@@ -269,23 +284,68 @@ svg {
         ] []
       ]
 
-    let make_node ~pos ~radius =
-      let title = make_title in
-      Svg.g
-        ~a:[Svg.a_class ["node"]]
-        (title :: make_circle ~pos ~radius)
+    let make_node ~pos ~radius ~text ~classes =
+      let title = make_title ~text in
+      let a = [ Svg.a_class ("node" :: classes) ] in
+      Svg.g ~a (title :: make_circle ~pos ~radius)
 
+    let center = { x = 0.5; y = 0.5 }
+    
+    let root_radius = 0.015 
+    
+    let make_direct_deps ~deps_w_positions =
+      deps_w_positions |> List.map (fun ((dep, pos), layer2_deps) ->
+        let radius = root_radius *. 0.7
+        and text =
+          sprintf "%s\nDependencies: %d"
+            dep.name (List.length layer2_deps)
+        and classes = [ dep.name; "direct_dep" ] in
+        make_node ~pos ~radius ~text ~classes
+      )
+    
+    (*goto define both direct and layer2 deps here 
+      * all nodes should be laid out in the same list
+      * could visualize layer2-deps as a spiral of dots 
+        * so there is a visual order 
+          * so they can be sorted too - e.g. by how many deps they have
+    *)
+    let make_deps (deps:assoc_graph) =
+      let deps_w_positions =
+        let open Gg in
+        let len_deps = List.length deps in
+        let diff_angle = Float.two_pi /. float len_deps in
+        deps |> List.mapi (fun i (dep, layer2_deps) ->
+          let angle = diff_angle *. float i in
+          let dist_center = 0.2 in
+          let x = cos angle *. dist_center +. center.x
+          and y = sin angle *. dist_center +. center.y in
+          ((dep, { x; y }), layer2_deps)
+        )
+      in
+      let direct_deps_nodes = make_direct_deps ~deps_w_positions in
+      let direct_deps_edges = [] in
+      let layer2_deps_nodes = [] in
+      let layer2_deps_edges = []
+      in
+      direct_deps_nodes @ direct_deps_edges @
+      layer2_deps_nodes @ layer2_deps_edges
+    
     let of_assoc (graph:assoc_graph) : t =
       match graph with
       | [] -> Tyxml_svg.svg []
-      | (top, direct_deps) :: layer2_deps ->
-        let top_svg =
-          let pos = { x = 0.5; y = 0.5 } in
-          let radius = 0.1 in
-          make_node ~pos ~radius
+      | (root_pkg, direct_deps) :: layer2_deps ->
+        let root_svg =
+          let pos = center
+          and radius = root_radius
+          and text =
+            sprintf "%s\nDirect dependencies: %d"
+              root_pkg.name (List.length direct_deps)
+          and classes = [ root_pkg.name; "root" ] in
+          make_node ~pos ~radius ~text ~classes
         in
+        let deps_svgs = make_deps layer2_deps in
         let a = [ Svg.a_viewBox (0., 0., 1., 1.) ] in
-        Svg.svg ~a [ top_svg ]
+        Svg.svg ~a (root_svg :: deps_svgs)
 
     let pp ppf html =
       Format.fprintf ppf "%a@." (Tyxml_svg.pp ()) html
