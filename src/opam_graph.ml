@@ -265,9 +265,24 @@ line {
 .layer2_deps.bg {
   fill: ghostwhite;
 }
+
+.direct_dep.node:hover {
+  transform-origin: center;
+  transform: scale(2);
+}
+
+.root:hover {
+  transform-origin: center;
+  transform: scale(2);
+  stroke-width: 0.009 !important;
+}
       
 |}
 
+    (* disabled CSS 
+
+    *)
+    
     (*< Note the '.layer2_deps.bg' selector... 
       https://steveliles.github.io/a_multi_class_union_css_selector.html*)
     (* .layer2_deps.bg fills:
@@ -333,9 +348,18 @@ line {
       )
 
     let make_direct_deps_edges ~deps_w_positions =
+      let open Gg in
       deps_w_positions |> List.map (fun ((dep, pos), layer2_deps) ->
-        let pos0 = center in
         let pos1 = pos in
+        let pos0 =
+          let center = V2.v center.x center.y in
+          let pos1 = V2.v pos1.x pos1.y in
+          let pos1_rel = V2.(pos1 - center) in
+          let pos1_rel_angle = V2.angle pos1_rel in
+          let pos0_rel = V2.(v root_radius pos1_rel_angle |> of_polar) in
+          let pos0 = V2.(pos0_rel + center) in
+          { x = V2.x pos0; y = V2.y pos0 }
+        in
         let classes = [ dep.name; "direct_dep" ] in
         make_edge ~pos0 ~pos1 ~classes
       )
@@ -386,12 +410,6 @@ line {
         )
       |> List.flatten
 
-    (*goto define both direct and layer2 deps here 
-      * all nodes should be laid out in the same list
-      * could visualize layer2-deps as a spiral of dots 
-        * so there is a visual order 
-          * so they can be sorted too - e.g. by how many deps they have
-    *)
     let make_deps (deps:assoc_graph) =
       let deps_w_positions =
         let open Gg in
@@ -444,7 +462,7 @@ line {
           ]
         ]]
         in
-        Svg.svg ~a (svg_defs @ deps_svgs @ [ root_svg ])
+        Svg.svg ~a (svg_defs @ (root_svg :: deps_svgs))
 
     let pp ppf html =
       Format.fprintf ppf "%a@." (Tyxml_svg.pp ()) html
