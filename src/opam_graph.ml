@@ -262,12 +262,18 @@ line {
   stroke: bisque;
 }
 
-.layer2_deps_bg {
-  fill: url(#gradient_01);
+.layer2_deps.bg {
+  fill: ghostwhite;
 }
       
 |}
-    (* a_fill @@ `Color ("url(#gradient_01)", None); *)
+
+    (*< Note the '.layer2_deps.bg' selector... 
+      https://steveliles.github.io/a_multi_class_union_css_selector.html*)
+    (* .layer2_deps.bg fills:
+       OCaml: a_fill @@ `Color ("url(#gradient_01)", None); 
+       CSS: fill: url(#gradient_01);
+    *)
 
     type position = {
       x : float;
