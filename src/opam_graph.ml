@@ -271,16 +271,15 @@ line {
   transform: scale(2);
 }
 
-.root:hover {
-  transform-origin: center;
+.root:hover ~ .node {
   transform: scale(2);
-  stroke-width: 0.009 !important;
 }
       
 |}
 
     (* disabled CSS 
-
+  transform-origin: center;
+  stroke-width: 0.009 !important;
     *)
     
     (*< Note the '.layer2_deps.bg' selector... 
@@ -321,7 +320,11 @@ line {
 
     let make_node ~pos ~radius ~text ~classes =
       let title = make_title ~text in
-      let a = [ Svg.a_class ("node" :: classes) ] in
+      let a_transform_origin = Svg.Unsafe.string_attrib "transform-origin" in
+      let a = Svg.[
+        a_class ("node" :: classes);
+        a_transform_origin @@ sprintf "%f %f" pos.x pos.y;
+      ] in
       Svg.g ~a (title :: make_circle ~pos ~radius)
 
     let make_line ~pos0 ~pos1 =
@@ -352,6 +355,7 @@ line {
       deps_w_positions |> List.map (fun ((dep, pos), layer2_deps) ->
         let pos1 = pos in
         let pos0 =
+          (*> Note: Need this because of mix of CSS selectors and SVG paint order*)
           let center = V2.v center.x center.y in
           let pos1 = V2.v pos1.x pos1.y in
           let pos1_rel = V2.(pos1 - center) in
