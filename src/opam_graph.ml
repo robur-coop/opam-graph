@@ -254,11 +254,11 @@ module Render = struct
 svg {
   width : 100vw;
   height : 100vh;
-  background : brown;
+  background : slategrey;
 }
 
 line {
-  stroke-width: 0.005;
+  stroke-width: 0.004;
   stroke: bisque;
 }
 
@@ -274,6 +274,9 @@ line {
       y : float;
     }
 
+    let center = { x = 0.5; y = 0.5 }
+    let root_radius = 0.015 
+    
     module Unit = struct
 
       let none size = size, None
@@ -312,10 +315,6 @@ line {
       let a = [ Svg.a_class ("edge" :: classes) ] in
       Svg.g ~a [ make_line ~pos0 ~pos1 ]
     
-    (*goto move up to top ? *)
-    let center = { x = 0.5; y = 0.5 }
-    let root_radius = 0.015 
-    
     let make_direct_deps_nodes ~deps_w_positions =
       deps_w_positions |> List.map (fun ((dep, pos), layer2_deps) ->
         let radius = root_radius *. 0.7
@@ -335,18 +334,14 @@ line {
         make_edge ~pos0 ~pos1 ~classes
       )
 
-    let make_layer2_deps_nodes ~deps_w_positions =
+    let make_layer2_deps ~deps_w_positions =
       let open Gg in
       deps_w_positions |> List.mapi
         (fun i ((_, direct_dep_pos), layer2_deps) ->
             let layer2_deps_center =
               let direct_dep_pos = V2.(v direct_dep_pos.x direct_dep_pos.y) in
               let center = V2.v center.x center.y in
-              let mult =
-                if i mod 2 = 0 then
-                  2.14
-                else
-                  1.5
+              let mult = if i mod 2 = 0 then 2.14 else 1.5
               in
               V2.(mult * (direct_dep_pos - center) + center)
             in
@@ -358,10 +353,7 @@ line {
                 let pos_radius = sqrt i' *. 0.012 -. 0.024 in
                 let angle_diff = sqrt i' *. Float.two_pi *. 0.055 in
                 let pos_angle = i' *. angle_diff in
-                let pos_rel =
-                  V2.v pos_radius pos_angle
-                  |> V2.of_polar
-                in
+                let pos_rel = V2.(v pos_radius pos_angle |> of_polar) in
                 let pos = V2.(layer2_deps_center + pos_rel) in
                 let pos = { x = V2.x pos; y = V2.y pos } in
                 let text = layer2_dep.name in
@@ -374,10 +366,17 @@ line {
                 { x = V2.x layer2_deps_center; y = V2.y layer2_deps_center }
               and radius = float (List.length layer2_deps) *. 0.003 
               and text = ""
-              and classes = [ "layer2_deps_bg" ] in
+              and classes = [ "layer2_deps"; "bg" ] in
               make_node ~pos ~radius ~text ~classes
             in
-            bg :: nodes
+            let edge =
+              let pos0 = direct_dep_pos in
+              let pos1 =
+                { x = V2.x layer2_deps_center; y = V2.y layer2_deps_center } in
+              let classes = [ "layer2_deps" ] in
+              make_edge ~pos0 ~pos1 ~classes
+            in
+            edge :: bg :: nodes
         )
       |> List.flatten
 
@@ -402,11 +401,9 @@ line {
       in
       let direct_deps_nodes = make_direct_deps_nodes ~deps_w_positions in
       let direct_deps_edges = make_direct_deps_edges ~deps_w_positions in
-      let layer2_deps_nodes = make_layer2_deps_nodes ~deps_w_positions in
-      let layer2_deps_edges = []
+      let layer2_deps = make_layer2_deps ~deps_w_positions 
       in
-      direct_deps_edges @ direct_deps_nodes @
-      layer2_deps_edges @ layer2_deps_nodes
+      direct_deps_edges @ direct_deps_nodes @ layer2_deps
     
     let of_assoc (graph:assoc_graph) : t =
       match graph with
