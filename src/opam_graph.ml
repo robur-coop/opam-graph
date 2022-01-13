@@ -267,17 +267,22 @@ line {
 }
 
 .direct_dep.node:hover {
-  transform-origin: center;
   transform: scale(2);
 }
 
 .root:hover ~ .node {
-  transform: scale(2);
+  transform: scale(1.1);
 }
       
 |}
 
     (* disabled CSS 
+(*> goto generate this and select unique direct-dep pkg equal to self*)
+.direct_dep.edge:hover ~ .direct_dep.node {
+  transform: scale(2);
+}
+
+
   transform-origin: center;
   stroke-width: 0.009 !important;
     *)
@@ -320,6 +325,7 @@ line {
 
     let make_node ~pos ~radius ~text ~classes =
       let title = make_title ~text in
+      (*> todo; why is this not in Tyxml - browser support missing?*)
       let a_transform_origin = Svg.Unsafe.string_attrib "transform-origin" in
       let a = Svg.[
         a_class ("node" :: classes);
