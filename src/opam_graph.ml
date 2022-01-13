@@ -370,7 +370,7 @@ line {
             let bg =
               let pos =
                 { x = V2.x layer2_deps_center; y = V2.y layer2_deps_center }
-              and radius = float (List.length layer2_deps) *. 0.003 
+              and radius = sqrt (float (List.length layer2_deps) +. 1.) *. 0.009
               and text = ""
               and classes = [ "layer2_deps"; "bg" ] in
               make_node ~pos ~radius ~text ~classes
