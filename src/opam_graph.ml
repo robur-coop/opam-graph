@@ -1,19 +1,19 @@
 
 let sprintf = Printf.sprintf
 
-module Set = OpamPackage.Set
+module OSet = OpamPackage.Set
 
 type package = OpamPackage.t
 
 let packages (switch : OpamFile.SwitchExport.t) =
-  assert (Set.cardinal switch.selections.sel_pinned = 0);
-  assert (Set.cardinal switch.selections.sel_compiler = 0);
-  assert (Set.subset switch.selections.sel_roots switch.selections.sel_installed);
+  assert (OSet.cardinal switch.selections.sel_pinned = 0);
+  assert (OSet.cardinal switch.selections.sel_compiler = 0);
+  assert (OSet.subset switch.selections.sel_roots switch.selections.sel_installed);
   switch.selections.sel_installed
 
 let root (switch : OpamFile.SwitchExport.t) =
-  assert (Set.cardinal switch.selections.sel_roots = 1);
-  Set.choose switch.selections.sel_roots
+  assert (OSet.cardinal switch.selections.sel_roots = 1);
+  OSet.choose switch.selections.sel_roots
 
 module Name_set = OpamPackage.Name.Set
 
@@ -268,30 +268,25 @@ line {
 }
 
 .layer2_deps.bg {
-  fill: ghostwhite;
+  fill: bisque;
 }
 
 .direct_dep.node:hover {
   transform: scale(2);
 }
 
-.root:hover ~ .node {
-  transform: scale(1.1);
-}
-      
 |}
 
     (* disabled CSS 
-(*> goto generate this and select unique direct-dep pkg equal to self*)
-.direct_dep.edge:hover ~ .direct_dep.node {
-  transform: scale(2);
+.root:hover ~ .node {
+  transform: scale(1.1);
 }
 
   transform-origin: center;
   stroke-width: 0.009 !important;
     *)
 
-    let add_css c c' = String.concat "\n" [ c; c' ]
+    let merge_css cs = String.concat "\n" cs
     
     (*< Note the '.layer2_deps.bg' selector... 
       https://steveliles.github.io/a_multi_class_union_css_selector.html*)
@@ -314,7 +309,6 @@ line {
 
     end
 
-    (*goto pass data or preformatted string *)
     let make_title ~text =
       let s = sprintf "%s" text in
       Svg.(title (txt s))
@@ -347,17 +341,19 @@ line {
         a_y2 @@ Unit.none pos1.y;
       ]) []
 
-    let make_edge ~pos0 ~pos1 ~classes =
+    let make_edge ~pos0 ~pos1 ~text ~classes =
       let a = [ Svg.a_class ("edge" :: classes) ] in
-      Svg.g ~a [ make_line ~pos0 ~pos1 ]
-    
+      let title = make_title ~text in
+      Svg.g ~a [ title; make_line ~pos0 ~pos1 ]
+
+    let make_direct_dep_text dep ~layer2_deps = 
+      sprintf "Direct dependency: %s\nDirect dependencies: %d"
+        dep.name (List.length layer2_deps)
+
     let make_direct_deps_nodes ~deps_w_positions =
       deps_w_positions |> List.map (fun ((dep, pos), layer2_deps) ->
         let radius = root_radius *. 0.7
-        and text =
-          sprintf "Direct dependency: %s\nDependencies: %d"
-            (*< goto choose between transitive/direct*)
-            dep.name (List.length layer2_deps)
+        and text = make_direct_dep_text dep ~layer2_deps 
         and classes = [ dep.name; "direct_dep" ] in
         make_node ~pos ~radius ~text ~classes
       )
@@ -366,7 +362,14 @@ line {
 .direct_dep.edge.%s:hover ~ .direct_dep.node.%s {
   transform: scale(2);
 }
-|} dep dep
+.direct_dep.edge.%s:hover ~ .layer2_deps.bg.%s {
+  fill: dimgrey;
+}
+.direct_dep.node.%s:hover ~ .layer2_deps.bg.%s {
+  fill: dimgrey;
+}
+|} dep dep dep dep dep dep
+    (*< goto move generation of node-css to some other place*)
     
     let make_direct_deps_edges ~deps_w_positions =
       let open Gg in
@@ -382,14 +385,15 @@ line {
           let pos0 = V2.(pos0_rel + center) in
           { x = V2.x pos0; y = V2.y pos0 }
         in
+        let text = make_direct_dep_text dep ~layer2_deps in
         let classes = [ dep.name; "direct_dep" ] in
-        make_edge ~pos0 ~pos1 ~classes
+        make_edge ~pos0 ~pos1 ~text ~classes
       ) in
       let css =
         deps_w_positions
         |> List.fold_left (fun acc_css ((dep, _), _) ->
           let css = make_direct_dep_edge_css dep.name in
-          add_css acc_css css
+          merge_css [ acc_css; css ]
         ) ""
       in
       svg, css
@@ -397,7 +401,7 @@ line {
     let make_layer2_deps ~deps_w_positions =
       let open Gg in
       deps_w_positions |> List.mapi
-        (fun i ((_, direct_dep_pos), layer2_deps) ->
+        (fun i ((dep, direct_dep_pos), layer2_deps) ->
             let layer2_deps_center =
               let direct_dep_pos = V2.(v direct_dep_pos.x direct_dep_pos.y) in
               let center = V2.v center.x center.y in
@@ -426,20 +430,57 @@ line {
                 { x = V2.x layer2_deps_center; y = V2.y layer2_deps_center }
               and radius = sqrt (float (List.length layer2_deps) +. 1.) *. 0.009
               and text = ""
-              and classes = [ "layer2_deps"; "bg" ] in
+              and classes = [ "layer2_deps"; "bg"; dep.name ] in
               make_node ~pos ~radius ~text ~classes
             in
             let edge =
               let pos0 = direct_dep_pos in
               let pos1 =
                 { x = V2.x layer2_deps_center; y = V2.y layer2_deps_center } in
+              let text = "" in
               let classes = [ "layer2_deps" ] in
-              make_edge ~pos0 ~pos1 ~classes
+              make_edge ~pos0 ~pos1 ~text ~classes
             in
             edge :: bg :: nodes
         )
       |> List.flatten
 
+    let make_shared_deps_css_aux ~dep ~shared_deps =
+      shared_deps |> Seq.map (fun shared_dep ->
+        sprintf {|
+.direct_dep.%s:hover ~ .node.layer2_dep.%s {
+  fill: hotpink;
+}
+        |} dep.name shared_dep
+      )
+      |> List.of_seq
+      |> merge_css
+    
+    let make_shared_deps_css ~deps_w_positions =
+      let module SSet = Set.Make(String) in
+      let sset_of_deps deps = 
+        deps
+        |> List.map (fun dep -> dep.name)
+        |> SSet.of_list
+      in
+      let layer2_deps_sets =
+        deps_w_positions |> List.map (fun (_, layer2_deps) ->
+          layer2_deps |> sset_of_deps
+        )
+      in
+      deps_w_positions |> List.map (fun ((dep, _), layer2_deps) ->
+        let layer2_deps = sset_of_deps layer2_deps in
+        let shared_deps =
+          layer2_deps_sets
+          |> List.fold_left (fun acc layer2_deps' ->
+            SSet.(union acc (inter layer2_deps layer2_deps'))
+          ) SSet.empty
+          |> SSet.to_seq
+        in
+        make_shared_deps_css_aux ~dep ~shared_deps
+      )
+      |> merge_css
+    
     let make_deps (deps:assoc_graph) =
       let deps_w_positions =
         let open Gg in
@@ -454,12 +495,13 @@ line {
         )
       in
       let direct_deps_edges, direct_deps_edges_css =
-        make_direct_deps_edges ~deps_w_positions in
-      let direct_deps_nodes = make_direct_deps_nodes ~deps_w_positions in
-      let layer2_deps = make_layer2_deps ~deps_w_positions 
+        make_direct_deps_edges ~deps_w_positions 
+      and direct_deps_nodes = make_direct_deps_nodes ~deps_w_positions 
+      and layer2_deps = make_layer2_deps ~deps_w_positions
+      and shared_deps_css = make_shared_deps_css ~deps_w_positions 
       in
       let svg = direct_deps_edges @ direct_deps_nodes @ layer2_deps in
-      let css = direct_deps_edges_css in
+      let css = merge_css [ direct_deps_edges_css; shared_deps_css ] in
       svg, css
     
     let svg_defs = Svg.[ defs [
@@ -496,7 +538,7 @@ line {
         let deps_svgs, deps_css = make_deps layer2_deps in
         let a = [ Svg.a_viewBox (0., 0., 1., 1.) ] in
         let svg = Svg.svg ~a (svg_defs @ (root_svg :: deps_svgs)) in
-        let css = add_css initial_css deps_css in
+        let css = merge_css [ initial_css; deps_css ] in
         { svg; css }
 
     let pp ppf html =
