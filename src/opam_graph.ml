@@ -243,13 +243,18 @@ module Render = struct
 
     type t = Tyxml_svg.doc
 
+    type output = {
+      svg : t;
+      css : string;
+    }
+
     module Svg = Tyxml_svg
 
     (*> goto
       * change svg width+height to pct again - using vw+vh for development
       * svg width+height shouldn't be here for compatibility with user css?
     *)
-    let css = {|
+    let initial_css = {|
 
 svg {
   width : 100vw;
@@ -282,10 +287,11 @@ line {
   transform: scale(2);
 }
 
-
   transform-origin: center;
   stroke-width: 0.009 !important;
     *)
+
+    let add_css c c' = String.concat "\n" [ c; c' ]
     
     (*< Note the '.layer2_deps.bg' selector... 
       https://steveliles.github.io/a_multi_class_union_css_selector.html*)
@@ -356,9 +362,15 @@ line {
         make_node ~pos ~radius ~text ~classes
       )
 
+    let make_direct_dep_edge_css dep = sprintf {|
+.direct_dep.edge.%s:hover ~ .direct_dep.node.%s {
+  transform: scale(2);
+}
+|} dep dep
+    
     let make_direct_deps_edges ~deps_w_positions =
       let open Gg in
-      deps_w_positions |> List.map (fun ((dep, pos), layer2_deps) ->
+      let svg = deps_w_positions |> List.map (fun ((dep, pos), layer2_deps) ->
         let pos1 = pos in
         let pos0 =
           (*> Note: Need this because of mix of CSS selectors and SVG paint order*)
@@ -372,7 +384,15 @@ line {
         in
         let classes = [ dep.name; "direct_dep" ] in
         make_edge ~pos0 ~pos1 ~classes
-      )
+      ) in
+      let css =
+        deps_w_positions
+        |> List.fold_left (fun acc_css ((dep, _), _) ->
+          let css = make_direct_dep_edge_css dep.name in
+          add_css acc_css css
+        ) ""
+      in
+      svg, css
 
     let make_layer2_deps ~deps_w_positions =
       let open Gg in
@@ -433,15 +453,36 @@ line {
           ((dep, { x; y }), layer2_deps)
         )
       in
+      let direct_deps_edges, direct_deps_edges_css =
+        make_direct_deps_edges ~deps_w_positions in
       let direct_deps_nodes = make_direct_deps_nodes ~deps_w_positions in
-      let direct_deps_edges = make_direct_deps_edges ~deps_w_positions in
       let layer2_deps = make_layer2_deps ~deps_w_positions 
       in
-      direct_deps_edges @ direct_deps_nodes @ layer2_deps
+      let svg = direct_deps_edges @ direct_deps_nodes @ layer2_deps in
+      let css = direct_deps_edges_css in
+      svg, css
     
-    let of_assoc (graph:assoc_graph) : t =
+    let svg_defs = Svg.[ defs [
+      radialGradient ~a:[
+        a_id "gradient_01";
+        a_cx @@ Unit.none 0.5;
+        a_cy @@ Unit.none 0.5;
+        a_r @@ Unit.none 0.5;
+      ] [
+        stop ~a:[
+          a_offset @@ `Percentage 0.;
+          a_stop_color "bisque"
+        ] [];
+        stop ~a:[
+          a_offset @@ `Percentage 100.;
+          a_stop_color "bisque"; a_stop_opacity 0.
+        ] []
+      ]
+    ]]
+
+    let of_assoc (graph:assoc_graph) : output =
       match graph with
-      | [] -> Tyxml_svg.svg []
+      | [] -> { svg = Tyxml_svg.svg []; css = "" }
       | (root_pkg, direct_deps) :: layer2_deps ->
         let root_svg =
           let pos = center
@@ -452,27 +493,11 @@ line {
           and classes = [ root_pkg.name; "root" ] in
           make_node ~pos ~radius ~text ~classes
         in
-        let deps_svgs = make_deps layer2_deps in
+        let deps_svgs, deps_css = make_deps layer2_deps in
         let a = [ Svg.a_viewBox (0., 0., 1., 1.) ] in
-        let svg_defs =Svg.[ defs [
-          radialGradient ~a:[
-            a_id "gradient_01";
-            a_cx @@ Unit.none 0.5;
-            a_cy @@ Unit.none 0.5;
-            a_r @@ Unit.none 0.5;
-          ] [
-            stop ~a:[
-              a_offset @@ `Percentage 0.;
-              a_stop_color "bisque"
-            ] [];
-            stop ~a:[
-              a_offset @@ `Percentage 100.;
-              a_stop_color "bisque"; a_stop_opacity 0.
-            ] []
-          ]
-        ]]
-        in
-        Svg.svg ~a (svg_defs @ (root_svg :: deps_svgs))
+        let svg = Svg.svg ~a (svg_defs @ (root_svg :: deps_svgs)) in
+        let css = add_css initial_css deps_css in
+        { svg; css }
 
     let pp ppf html =
       Format.fprintf ppf "%a@." (Tyxml_svg.pp ()) html
@@ -490,9 +515,9 @@ line {
       H.html
         (H.head
             (H.title (H.txt "Dependencies"))
-            [H.style [H.Unsafe.data Svg.css]]
+            [H.style [H.Unsafe.data svg.css]]
         )
-        (H.body [ H.svg [ svg ] ])
+        (H.body [ H.svg [ svg.svg ] ])
 
     let pp ppf html =
       Format.fprintf ppf "%a@." (Tyxml_html.pp ()) html
