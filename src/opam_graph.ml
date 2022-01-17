@@ -403,7 +403,7 @@ line {
           radius_pos1_rel *. 1.2 in
         let bottom_width =
           if diff_angle < Float.pi_div_2 then 
-            sin diff_angle *. height_triangle (*Note: Scaling sin by radius*)
+            sin diff_angle *. height_triangle (*Note: Scaling sin by ~ circle-radius*)
           else
             height_triangle
         in
@@ -415,7 +415,8 @@ line {
         let pos1_extended = V2.(height_triangle * pos1_unit + center) in
         let right = V2.(right_leg + pos1_extended)
         and left  = V2.(left_leg + pos1_extended) in
-        { x = V2.x left; y = V2.y left }, { x = V2.x right; y = V2.y right }
+        { x = V2.x left; y = V2.y left },
+        { x = V2.x right; y = V2.y right }
       in
       Svg.g ~a [ title; make_triangle ~top:pos0 ~left ~right ]
     
@@ -479,10 +480,7 @@ line {
       let east  = V2.ortho south
       in
       let rec aux i' len_side consumed_side dir pos_acc =
-        if i = i' then pos_acc else
-        if i' = 0 then
-          aux (succ i') (len_side +2) 1 `East V2.(north + pos_acc)
-        else (
+        if i = i' then pos_acc else (
           match dir with
           | `East ->
             if consumed_side = len_side then
@@ -501,12 +499,12 @@ line {
               aux (succ i') len_side (succ consumed_side) dir V2.(west + pos_acc)
           | `North ->
             if consumed_side = len_side then
+              (*> Note special case of jumping to next 'level'*)
               aux (succ i') (len_side +2) 1 `East V2.(north + pos_acc)
             else
               aux (succ i') len_side (succ consumed_side) dir V2.(north + pos_acc)
         )
       in
-      (*> Note most of these args are not used initially..*)
       aux 0 0 0 `East V2.(v 0. 0.)
     
     let make_layer2_nodes_grid ~layer2_deps ~layer2_deps_center =
