@@ -370,25 +370,77 @@ line {
 }
 |} dep dep dep dep dep dep
     (*< goto move generation of node-css to some other place*)
+
+    let make_triangle ~top ~left ~right =
+      let a = Svg.[
+        a_points [
+          top.x, top.y;
+          left.x, left.y;
+          right.x, right.y;
+        ];
+        a_fill @@ `Color ("rgba(0,0,0,0)", None); (*goto control with css*)
+        (* a_stroke @@ `Color ("black", None); 
+         * a_stroke_width @@ Unit.none 0.002; *)
+      ] in
+      Svg.polygon ~a []
+    
+    let make_hitbox_direct_dep_edge ~pos0 ~pos1 ~n_edges ~text ~classes =
+      let a = [ Svg.a_class ("edge" :: "hitbox" :: classes) ] in
+      let title = make_title ~text in
+      let left, right = 
+        let open Gg in
+        let n_edges = float (max 1 n_edges) in
+        let diff_angle = Float.two_pi /. n_edges in 
+        let pos0, pos1 = V2.(v pos0.x pos0.y, v pos1.x pos1.y) in
+        let center = V2.v center.x center.y in
+        let pos1_rel = V2.(pos1 - center) in
+        let height_triangle =
+          let radius_pos1_rel, _ = V2.(to_polar pos1_rel |> to_tuple) in
+          radius_pos1_rel *. 1.2 in
+        let bottom_width =
+          if diff_angle < Float.pi_div_2 then 
+            sin diff_angle *. height_triangle (*Note: Scaling sin by radius*)
+          else
+            height_triangle
+        in
+        let normal_pos1 = V2.(ortho pos1_rel / norm pos1_rel) in
+        let normal'_pos1 = V2.(-1. * normal_pos1) in
+        let right_leg = V2.((0.5 *. bottom_width) * normal_pos1) in
+        let left_leg = V2.((0.5 *. bottom_width) * normal'_pos1) in
+        let pos1_unit = V2.(pos1_rel / norm pos1_rel) in
+        let pos1_extended = V2.(height_triangle * pos1_unit + center) in
+        let right = V2.(right_leg + pos1_extended)
+        and left  = V2.(left_leg + pos1_extended) in
+        { x = V2.x left; y = V2.y left }, { x = V2.x right; y = V2.y right }
+      in
+      Svg.g ~a [ title; make_triangle ~top:pos0 ~left ~right ]
     
     let make_direct_deps_edges ~deps_w_positions =
       let open Gg in
-      let svg = deps_w_positions |> List.map (fun ((dep, pos), layer2_deps) ->
-        let pos1 = pos in
-        let pos0 =
-          (*> Note: Need this because of mix of CSS selectors and SVG paint order*)
-          let center = V2.v center.x center.y in
-          let pos1 = V2.v pos1.x pos1.y in
-          let pos1_rel = V2.(pos1 - center) in
-          let pos1_rel_angle = V2.angle pos1_rel in
-          let pos0_rel = V2.(v root_radius pos1_rel_angle |> of_polar) in
-          let pos0 = V2.(pos0_rel + center) in
-          { x = V2.x pos0; y = V2.y pos0 }
-        in
-        let text = make_direct_dep_text dep ~layer2_deps in
-        let classes = [ dep.name; "direct_dep" ] in
-        make_edge ~pos0 ~pos1 ~text ~classes
-      ) in
+      let n_edges = deps_w_positions |> List.length in
+      let svg =
+        deps_w_positions |> List.concat_map (fun ((dep, pos), layer2_deps) ->
+          let pos1 = pos in
+          let pos0, pos0_angle =
+            (*> Note: Need this because of mix of CSS selectors and SVG paint order*)
+            let center = V2.v center.x center.y in
+            let pos1 = V2.v pos1.x pos1.y in
+            let pos1_rel = V2.(pos1 - center) in
+            let pos1_rel_angle = V2.angle pos1_rel in
+            let pos0_rel = V2.(v root_radius pos1_rel_angle |> of_polar) in
+            let pos0 = V2.(pos0_rel + center) in
+            { x = V2.x pos0; y = V2.y pos0 }, pos1_rel_angle
+          in
+          let text = make_direct_dep_text dep ~layer2_deps in
+          let classes = [ dep.name; "direct_dep" ] in
+          let visual_svg = make_edge ~pos0 ~pos1 ~text ~classes in
+          let hitbox_svg =
+            make_hitbox_direct_dep_edge
+              ~pos0 ~pos1 ~n_edges ~text ~classes
+          in
+          [ visual_svg; hitbox_svg ]
+        )
+      in
       let css =
         deps_w_positions
         |> List.fold_left (fun acc_css ((dep, _), _) ->
@@ -417,7 +469,7 @@ line {
                 let pos_radius = sqrt i' *. 0.012 -. 0.024 in
                 let angle_diff = sqrt i' *. Float.two_pi *. 0.055 in
                 let pos_angle = i' *. angle_diff in
-                let pos_rel = V2.(v pos_radius pos_angle |> of_polar) in
+                let pos_rel = V2.(v pos_radius pos_angle |> of_polar) in (*goo*)
                 let pos = V2.(layer2_deps_center + pos_rel) in
                 let pos = { x = V2.x pos; y = V2.y pos } in
                 let text = layer2_dep.name in
