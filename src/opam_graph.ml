@@ -268,7 +268,7 @@ line {
 }
 
 .layer2_deps.bg {
-  fill: bisque;
+  fill: url(#gradient_01);
 }
 
 .direct_dep.node:hover {
@@ -278,6 +278,10 @@ line {
 |}
 
     (* disabled CSS 
+.layer2_deps.bg {
+  fill: bisque;
+}
+
 .root:hover ~ .node {
   transform: scale(1.1);
 }
@@ -450,6 +454,74 @@ line {
       in
       svg, css
 
+    let make_layer2_nodes_spiral ~layer2_deps ~layer2_deps_center =
+      let open Gg in
+      let dot_radius = root_radius *. 0.25 in
+      layer2_deps |> List.mapi (fun i' layer2_dep ->
+        let i' = float i' +. 5.5 in
+        let pos_radius = sqrt i' *. 0.007 -. 0.005 in
+        let angle_diff = sqrt i' *. Float.two_pi *. 0.005 +. 0.6 in
+        let pos_angle = i' *. angle_diff in
+        let pos_rel = V2.(v pos_radius pos_angle |> of_polar) in (*goo*)
+        let pos = V2.(layer2_deps_center + pos_rel) in
+        let pos = { x = V2.x pos; y = V2.y pos } in
+        let text = layer2_dep.name in
+        let classes = [ layer2_dep.name; "layer2_dep" ] in
+        make_node ~pos ~radius:dot_radius ~text ~classes
+      )
+
+    (*goto implement as iterative search*)
+    let grid_pos ~cell_width i =
+      let open Gg in
+      let north = V2.v 0. cell_width in
+      let west  = V2.ortho north in
+      let south = V2.ortho west in
+      let east  = V2.ortho south
+      in
+      let rec aux i' len_side consumed_side dir pos_acc =
+        if i = i' then pos_acc else
+        if i' = 0 then
+          aux (succ i') (len_side +2) 1 `East V2.(north + pos_acc)
+        else (
+          match dir with
+          | `East ->
+            if consumed_side = len_side then
+              aux i' len_side 0 `South pos_acc
+            else
+              aux (succ i') len_side (succ consumed_side) dir V2.(east + pos_acc)
+          | `South ->
+            if consumed_side = len_side then
+              aux i' len_side 0 `West pos_acc
+            else
+              aux (succ i') len_side (succ consumed_side) dir V2.(south + pos_acc)
+          | `West ->
+            if consumed_side = len_side then
+              aux i' len_side 0 `North pos_acc
+            else
+              aux (succ i') len_side (succ consumed_side) dir V2.(west + pos_acc)
+          | `North ->
+            if consumed_side = len_side then
+              aux (succ i') (len_side +2) 1 `East V2.(north + pos_acc)
+            else
+              aux (succ i') len_side (succ consumed_side) dir V2.(north + pos_acc)
+        )
+      in
+      (*> Note most of these args are not used initially..*)
+      aux 0 0 0 `East V2.(v 0. 0.)
+    
+    let make_layer2_nodes_grid ~layer2_deps ~layer2_deps_center =
+      let open Gg in
+      let n_layer2_deps = List.length layer2_deps in
+      let dot_radius = 0.005 in
+      let cell_width = dot_radius *. 2.5 in
+      layer2_deps |> List.mapi (fun i layer2_dep ->
+        let pos = V2.(layer2_deps_center + grid_pos ~cell_width i) in
+        let pos = { x = V2.x pos; y = V2.y pos } in
+        let text = layer2_dep.name in
+        let classes = [ layer2_dep.name; "layer2_dep" ] in
+        make_node ~pos ~radius:dot_radius ~text ~classes
+      )
+
     let make_layer2_deps ~deps_w_positions =
       let open Gg in
       deps_w_positions |> List.mapi
@@ -461,26 +533,11 @@ line {
               in
               V2.(mult * (direct_dep_pos - center) + center)
             in
-            let dot_radius = root_radius *. 0.2
-            in
-            let nodes =
-              layer2_deps |> List.mapi (fun i' layer2_dep ->
-                let i' = float i' +. 5.5 in
-                let pos_radius = sqrt i' *. 0.012 -. 0.024 in
-                let angle_diff = sqrt i' *. Float.two_pi *. 0.055 in
-                let pos_angle = i' *. angle_diff in
-                let pos_rel = V2.(v pos_radius pos_angle |> of_polar) in (*goo*)
-                let pos = V2.(layer2_deps_center + pos_rel) in
-                let pos = { x = V2.x pos; y = V2.y pos } in
-                let text = layer2_dep.name in
-                let classes = [ layer2_dep.name; "layer2_dep" ] in
-                make_node ~pos ~radius:dot_radius ~text ~classes
-              )
-            in
+            let nodes = make_layer2_nodes_grid ~layer2_deps ~layer2_deps_center in
             let bg =
               let pos =
                 { x = V2.x layer2_deps_center; y = V2.y layer2_deps_center }
-              and radius = sqrt (float (List.length layer2_deps) +. 1.) *. 0.009
+              and radius = sqrt (float (List.length layer2_deps) +. 1.) *. 0.0115
               and text = ""
               and classes = [ "layer2_deps"; "bg"; dep.name ] in
               make_node ~pos ~radius ~text ~classes
