@@ -275,6 +275,10 @@ line {
   transform: scale(2);
 }
 
+.layer2_dep.node:hover {
+  transform: scale(1.4);
+}
+
 |}
 
     (* disabled CSS 
@@ -327,7 +331,7 @@ line {
         ] []
       ]
 
-    let make_rect ~center_pos ~width =
+    let make_square ~center_pos ~width =
       let open Gg in
       let center_pos = V2.v center_pos.x center_pos.y in
       let diagonal = V2.v width width in
@@ -336,7 +340,7 @@ line {
       Svg.[
         rect ~a:[
           (* a_stroke @@ `Color ("black", None); 
-           * a_stroke_width @@ Unit.none 0.001;  *)
+           * a_stroke_width @@ Unit.none 0.001; *)
           a_fill @@ `Color ("rgba(0,0,0,0)", None); (*goto control with css*)
           a_x @@ Unit.none @@ V2.x pos;
           a_y @@ Unit.none @@ V2.y pos;
@@ -390,9 +394,17 @@ line {
 .direct_dep.node.%s:hover ~ .layer2_deps.bg.%s {
   fill: dimgrey;
 }
-|} dep dep dep dep dep dep
+|} dep dep dep dep dep dep 
     (*< goto move generation of node-css to some other place*)
 
+    (*disabled css:
+(*> problem: selected other following children as well*)
+.layer2_dep.hitbox.%s:hover ~ .layer2_dep.node.%s {
+  transform: scale(1.4);
+}
+
+*)
+    
     let make_triangle ~top ~left ~right =
       let a = Svg.[
         a_points [
@@ -533,7 +545,7 @@ line {
         a_class ("hitbox" :: classes);
         a_transform_origin @@ sprintf "%f %f" center_pos.x center_pos.y;
       ] in
-      Svg.g ~a (title :: make_rect ~center_pos ~width)
+      Svg.g ~a (title :: make_square ~center_pos ~width)
 
     let make_layer2_nodes_grid ~layer2_deps ~layer2_deps_center =
       let open Gg in
@@ -550,7 +562,7 @@ line {
           make_hitbox_square ~text ~classes 
             ~center_pos:pos
             ~width:cell_width in
-        [ visual_svg; hitbox_svg ]
+        [ (* hitbox_svg;  *)visual_svg ]
       )
       |> List.flatten
 
