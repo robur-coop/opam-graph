@@ -290,8 +290,6 @@ line {
   stroke-width: 0.009 !important;
     *)
 
-    let merge_css cs = String.concat "\n" cs
-    
     (*< Note the '.layer2_deps.bg' selector... 
       https://steveliles.github.io/a_multi_class_union_css_selector.html*)
     (* .layer2_deps.bg fills:
@@ -299,6 +297,8 @@ line {
        CSS: fill: url(#gradient_01);
     *)
 
+    let merge_css cs = String.concat "\n" cs
+    
     type position = {
       x : float;
       y : float;
@@ -320,13 +320,31 @@ line {
     let make_circle ~pos ~radius =
       Svg.[
         circle ~a:[
-          a_class ["node_circle"];
+          a_class ["node_circle"]; 
           a_cx @@ Unit.none pos.x;
           a_cy @@ Unit.none pos.y;
           a_r @@ Unit.none radius;
         ] []
       ]
 
+    let make_rect ~center_pos ~width =
+      let open Gg in
+      let center_pos = V2.v center_pos.x center_pos.y in
+      let diagonal = V2.v width width in
+      let center_displacement = V2.half diagonal in
+      let pos = V2.(center_pos - center_displacement) in
+      Svg.[
+        rect ~a:[
+          (* a_stroke @@ `Color ("black", None); 
+           * a_stroke_width @@ Unit.none 0.001;  *)
+          a_fill @@ `Color ("rgba(0,0,0,0)", None); (*goto control with css*)
+          a_x @@ Unit.none @@ V2.x pos;
+          a_y @@ Unit.none @@ V2.y pos;
+          a_width @@ Unit.none width;
+          a_height @@ Unit.none width;
+        ] []
+      ]
+    
     let make_node ~pos ~radius ~text ~classes =
       let title = make_title ~text in
       (*> todo; why is this not in Tyxml - browser support missing?*)
@@ -463,7 +481,7 @@ line {
         let pos_radius = sqrt i' *. 0.007 -. 0.005 in
         let angle_diff = sqrt i' *. Float.two_pi *. 0.005 +. 0.6 in
         let pos_angle = i' *. angle_diff in
-        let pos_rel = V2.(v pos_radius pos_angle |> of_polar) in (*goo*)
+        let pos_rel = V2.(v pos_radius pos_angle |> of_polar) in 
         let pos = V2.(layer2_deps_center + pos_rel) in
         let pos = { x = V2.x pos; y = V2.y pos } in
         let text = layer2_dep.name in
@@ -506,7 +524,17 @@ line {
         )
       in
       aux 0 0 0 `East V2.(v 0. 0.)
-    
+
+    let make_hitbox_square ~center_pos ~width ~text ~classes =
+      let title = make_title ~text in
+      (*> todo; why is this not in Tyxml - browser support missing?*)
+      let a_transform_origin = Svg.Unsafe.string_attrib "transform-origin" in
+      let a = Svg.[
+        a_class ("hitbox" :: classes);
+        a_transform_origin @@ sprintf "%f %f" center_pos.x center_pos.y;
+      ] in
+      Svg.g ~a (title :: make_rect ~center_pos ~width)
+
     let make_layer2_nodes_grid ~layer2_deps ~layer2_deps_center =
       let open Gg in
       let n_layer2_deps = List.length layer2_deps in
@@ -517,8 +545,14 @@ line {
         let pos = { x = V2.x pos; y = V2.y pos } in
         let text = layer2_dep.name in
         let classes = [ layer2_dep.name; "layer2_dep" ] in
-        make_node ~pos ~radius:dot_radius ~text ~classes
+        let visual_svg = make_node ~pos ~radius:dot_radius ~text ~classes in
+        let hitbox_svg =
+          make_hitbox_square ~text ~classes 
+            ~center_pos:pos
+            ~width:cell_width in
+        [ visual_svg; hitbox_svg ]
       )
+      |> List.flatten
 
     let make_layer2_deps ~deps_w_positions =
       let open Gg in
