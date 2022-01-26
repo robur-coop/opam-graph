@@ -608,7 +608,7 @@ svg {
       shared_deps |> Seq.map (fun shared_dep ->
         sprintf {|
 .direct_dep.%s:hover ~ .node.layer2_dep.%s {
-  fill: hotpink;
+  fill: #5454ff;
 }
         |} dep.name shared_dep
       )
