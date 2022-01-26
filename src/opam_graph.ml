@@ -242,9 +242,12 @@ module Render = struct
   module Svg = struct
 
     type t = Tyxml_svg.doc
+    type 'a elt = 'a Tyxml_svg.elt
+    type 'a attr = 'a Tyxml_svg.attrib
 
-    type output = {
-      svg : t;
+    type ('a, 'b) output = {
+      svg_content : 'a elt list;
+      svg_attr : 'b attr list;
       css : string;
     }
 
@@ -257,8 +260,6 @@ module Render = struct
     let initial_css = {|
 
 svg {
-  width : 100vw;
-  height : 100vh;
   background : slategrey;
 }
 
@@ -282,6 +283,11 @@ line {
 |}
 
     (* disabled CSS 
+svg { 
+  width : 100vw;
+  height : 100vh;
+}
+
 .layer2_deps.bg {
   fill: bisque;
 }
@@ -675,9 +681,9 @@ line {
       ]
     ]]
 
-    let of_assoc (graph:assoc_graph) : output =
+    let of_assoc (graph:assoc_graph) : _ output =
       match graph with
-      | [] -> { svg = Tyxml_svg.svg []; css = "" }
+      | [] -> { svg_content = []; svg_attr = []; css = "" }
       | (root_pkg, direct_deps) :: layer2_deps ->
         let root_svg =
           let pos = center
@@ -689,10 +695,10 @@ line {
           make_node ~pos ~radius ~text ~classes
         in
         let deps_svgs, deps_css = make_deps layer2_deps in
-        let a = [ Svg.a_viewBox (0., 0., 1., 1.) ] in
-        let svg = Svg.svg ~a (svg_defs @ (root_svg :: deps_svgs)) in
+        let svg_attr = [ Svg.a_viewBox (0., 0., 1., 1.) ] in
+        let svg_content = svg_defs @ (root_svg :: deps_svgs) in
         let css = merge_css [ initial_css; deps_css ] in
-        { svg; css }
+        { svg_content; svg_attr; css }
 
     let pp ppf html =
       Format.fprintf ppf "%a@." (Tyxml_svg.pp ()) html
@@ -705,14 +711,16 @@ line {
 
     type t = H.doc
 
-    let of_assoc (graph:assoc_graph) : t =
+    let merge_css = String.concat "\n" 
+    
+    let of_assoc ?(override_css="") (graph:assoc_graph) : t =
       let svg = Svg.of_assoc graph in
       H.html
         (H.head
             (H.title (H.txt "Dependencies"))
-            [H.style [H.Unsafe.data svg.css]]
+            [H.style [H.Unsafe.data  @@ merge_css [ svg.css; override_css ]]]
         )
-        (H.body [ H.svg [ svg.svg ] ])
+        (H.body [ H.svg ~a:svg.svg_attr svg.svg_content ])
 
     let pp ppf html =
       Format.fprintf ppf "%a@." (Tyxml_html.pp ()) html
