@@ -34,7 +34,7 @@ let direct_dependencies (switch : OpamFile.SwitchExport.t) pkg =
 
 let transitive_dependencies (switch : OpamFile.SwitchExport.t) pkg =
   let available = switch.selections.sel_installed in
-  let rec aux pkg seen_pkgs = 
+  let rec aux pkg seen_pkgs =
     let opam = opam_file switch pkg in
     let set = filtered_formula_to_pkgs switch (OpamFile.OPAM.depends opam) in
     let set = filtered_formula_to_pkgs switch ~set (OpamFile.OPAM.depopts opam) in
@@ -80,7 +80,6 @@ let pp_graph ppf graph =
     graph.nodes
 
 let dependencies ?(transitive=false) (switch : OpamFile.SwitchExport.t) =
-  let available = switch.selections.sel_installed in
   let root_pkg = root switch in
   let top = root_pkg.OpamPackage.name in
   let graph = { top ; nodes = Name_map.empty } in
@@ -90,7 +89,7 @@ let dependencies ?(transitive=false) (switch : OpamFile.SwitchExport.t) =
     | None -> graph
     | Some x ->
       let deps = match transitive with
-        | true -> transitive_dependencies switch x 
+        | true -> transitive_dependencies switch x
         | false -> direct_dependencies switch x
       in
       let deps =
@@ -117,7 +116,7 @@ type assoc_node = {
   uniqueness_postfix : string;
 }
 type assoc_graph = (assoc_node * (assoc_node list)) list
-  
+
 module Ui = struct
 
   let dependencies ?(transitive=true) data : assoc_graph =
@@ -126,7 +125,7 @@ module Ui = struct
     let root = all_direct_deps.top in
     let root_str = OpamPackage.Name.to_string root
     in
-    let direct_deps = 
+    let direct_deps =
       all_direct_deps.nodes
       |> Name_map.find root
     in
@@ -144,7 +143,7 @@ module Ui = struct
           | None -> Name_set.empty
           | Some v -> v)
           |> Name_set.elements
-          |> List.map OpamPackage.Name.to_string 
+          |> List.map OpamPackage.Name.to_string
         in
         let direct_dep = OpamPackage.Name.to_string direct_dep in
         direct_dep, transitive_deps
@@ -174,7 +173,7 @@ module Ui = struct
 
 end
 
-module Render = struct 
+module Render = struct
 
   module Dot = struct
 
@@ -189,7 +188,7 @@ module Render = struct
             let pkg_point = Edge_node_id (pkg_id, None) in
             let deps_points =
               Name_set.elements deps
-              |> List.map (fun p -> 
+              |> List.map (fun p ->
                 let id = Double_quoted_id (OpamPackage.Name.to_string p) in
                 Edge_node_id (id, None)
               )
@@ -207,7 +206,7 @@ module Render = struct
 
     let id_of_assoc_node node =
       sprintf "%s_%s" node.name node.uniqueness_postfix
-    
+
     let of_assoc (graph:assoc_graph) : t =
       let open Odot in
       let stmt_list =
@@ -218,7 +217,7 @@ module Render = struct
             let pkg_point = Edge_node_id (pkg_id, None) in
             let deps_points =
               deps
-              |> List.map (fun pkg -> 
+              |> List.map (fun pkg ->
                 let id = Double_quoted_id (id_of_assoc_node pkg) in
                 Edge_node_id (id, None)
               )
@@ -227,7 +226,7 @@ module Render = struct
             Stmt_edge edge
           in
           stmt :: acc
-        ) [] 
+        ) []
       in
       { strict = false; (*todo test params*)
         kind = Digraph;
@@ -282,8 +281,8 @@ line {
 
 |}
 
-    (* disabled CSS 
-svg { 
+    (* disabled CSS
+svg {
   width : 100vw;
   height : 100vh;
 }
@@ -300,23 +299,23 @@ svg {
   stroke-width: 0.009 !important;
     *)
 
-    (*< Note the '.layer2_deps.bg' selector... 
+    (*< Note the '.layer2_deps.bg' selector...
       https://steveliles.github.io/a_multi_class_union_css_selector.html*)
     (* .layer2_deps.bg fills:
-       OCaml: a_fill @@ `Color ("url(#gradient_01)", None); 
+       OCaml: a_fill @@ `Color ("url(#gradient_01)", None);
        CSS: fill: url(#gradient_01);
     *)
 
     let merge_css cs = String.concat "\n" cs
-    
+
     type position = {
       x : float;
       y : float;
     }
 
     let center = { x = 0.5; y = 0.5 }
-    let root_radius = 0.015 
-    
+    let root_radius = 0.015
+
     module Unit = struct
 
       let none size = size, None
@@ -330,7 +329,7 @@ svg {
     let make_circle ~pos ~radius =
       Svg.[
         circle ~a:[
-          a_class ["node_circle"]; 
+          a_class ["node_circle"];
           a_cx @@ Unit.none pos.x;
           a_cy @@ Unit.none pos.y;
           a_r @@ Unit.none radius;
@@ -345,7 +344,7 @@ svg {
       let pos = V2.(center_pos - center_displacement) in
       Svg.[
         rect ~a:[
-          (* a_stroke @@ `Color ("black", None); 
+          (* a_stroke @@ `Color ("black", None);
            * a_stroke_width @@ Unit.none 0.001; *)
           a_fill @@ `Color ("rgba(0,0,0,0)", None); (*goto control with css*)
           a_x @@ Unit.none @@ V2.x pos;
@@ -354,7 +353,7 @@ svg {
           a_height @@ Unit.none width;
         ] []
       ]
-    
+
     let make_node ~pos ~radius ~text ~classes =
       let title = make_title ~text in
       (*> todo; why is this not in Tyxml - browser support missing?*)
@@ -378,14 +377,14 @@ svg {
       let title = make_title ~text in
       Svg.g ~a [ title; make_line ~pos0 ~pos1 ]
 
-    let make_direct_dep_text dep ~layer2_deps = 
+    let make_direct_dep_text dep ~layer2_deps =
       sprintf "Direct dependency: %s\nDirect dependencies: %d"
         dep.name (List.length layer2_deps)
 
     let make_direct_deps_nodes ~deps_w_positions =
       deps_w_positions |> List.map (fun ((dep, pos), layer2_deps) ->
         let radius = root_radius *. 0.7
-        and text = make_direct_dep_text dep ~layer2_deps 
+        and text = make_direct_dep_text dep ~layer2_deps
         and classes = [ dep.name; "direct_dep" ] in
         make_node ~pos ~radius ~text ~classes
       )
@@ -400,7 +399,7 @@ svg {
 .direct_dep.node.%s:hover ~ .layer2_deps.bg.%s {
   fill: dimgrey;
 }
-|} dep dep dep dep dep dep 
+|} dep dep dep dep dep dep
     (*< goto move generation of node-css to some other place*)
 
     (*disabled css:
@@ -410,7 +409,7 @@ svg {
 }
 
 *)
-    
+
     let make_triangle ~top ~left ~right =
       let a = Svg.[
         a_points [
@@ -419,26 +418,26 @@ svg {
           right.x, right.y;
         ];
         a_fill @@ `Color ("rgba(0,0,0,0)", None); (*goto control with css*)
-        (* a_stroke @@ `Color ("black", None); 
+        (* a_stroke @@ `Color ("black", None);
          * a_stroke_width @@ Unit.none 0.002; *)
       ] in
       Svg.polygon ~a []
-    
+
     let make_hitbox_direct_dep_edge ~pos0 ~pos1 ~n_edges ~text ~classes =
       let a = [ Svg.a_class ("edge" :: "hitbox" :: classes) ] in
       let title = make_title ~text in
-      let left, right = 
+      let left, right =
         let open Gg in
         let n_edges = float (max 1 n_edges) in
-        let diff_angle = Float.two_pi /. n_edges in 
-        let pos0, pos1 = V2.(v pos0.x pos0.y, v pos1.x pos1.y) in
+        let diff_angle = Float.two_pi /. n_edges in
+        let _pos0, pos1 = V2.(v pos0.x pos0.y, v pos1.x pos1.y) in
         let center = V2.v center.x center.y in
         let pos1_rel = V2.(pos1 - center) in
         let height_triangle =
           let radius_pos1_rel, _ = V2.(to_polar pos1_rel |> to_tuple) in
           radius_pos1_rel *. 1.2 in
         let bottom_width =
-          if diff_angle < Float.pi_div_2 then 
+          if diff_angle < Float.pi_div_2 then
             sin diff_angle *. height_triangle (*Note: Scaling sin by ~ circle-radius*)
           else
             height_triangle
@@ -455,14 +454,14 @@ svg {
         { x = V2.x right; y = V2.y right }
       in
       Svg.g ~a [ title; make_triangle ~top:pos0 ~left ~right ]
-    
+
     let make_direct_deps_edges ~deps_w_positions =
       let open Gg in
       let n_edges = deps_w_positions |> List.length in
       let svg =
         deps_w_positions |> List.concat_map (fun ((dep, pos), layer2_deps) ->
           let pos1 = pos in
-          let pos0, pos0_angle =
+          let pos0, _pos0_angle =
             (*> Note: Need this because of mix of CSS selectors and SVG paint order*)
             let center = V2.v center.x center.y in
             let pos1 = V2.v pos1.x pos1.y in
@@ -499,7 +498,7 @@ svg {
         let pos_radius = sqrt i' *. 0.007 -. 0.005 in
         let angle_diff = sqrt i' *. Float.two_pi *. 0.005 +. 0.6 in
         let pos_angle = i' *. angle_diff in
-        let pos_rel = V2.(v pos_radius pos_angle |> of_polar) in 
+        let pos_rel = V2.(v pos_radius pos_angle |> of_polar) in
         let pos = V2.(layer2_deps_center + pos_rel) in
         let pos = { x = V2.x pos; y = V2.y pos } in
         let text = layer2_dep.name in
@@ -555,7 +554,6 @@ svg {
 
     let make_layer2_nodes_grid ~layer2_deps ~layer2_deps_center =
       let open Gg in
-      let n_layer2_deps = List.length layer2_deps in
       let dot_radius = 0.005 in
       let cell_width = dot_radius *. 2.5 in
       layer2_deps |> List.mapi (fun i layer2_dep ->
@@ -564,8 +562,8 @@ svg {
         let text = layer2_dep.name in
         let classes = [ layer2_dep.name; "layer2_dep" ] in
         let visual_svg = make_node ~pos ~radius:dot_radius ~text ~classes in
-        let hitbox_svg =
-          make_hitbox_square ~text ~classes 
+        let _hitbox_svg =
+          make_hitbox_square ~text ~classes
             ~center_pos:pos
             ~width:cell_width in
         [ (* hitbox_svg;  *)visual_svg ]
@@ -614,10 +612,10 @@ svg {
       )
       |> List.of_seq
       |> merge_css
-    
+
     let make_shared_deps_css ~deps_w_positions =
       let module SSet = Set.Make(String) in
-      let sset_of_deps deps = 
+      let sset_of_deps deps =
         deps
         |> List.map (fun dep -> dep.name)
         |> SSet.of_list
@@ -639,7 +637,7 @@ svg {
         make_shared_deps_css_aux ~dep ~shared_deps
       )
       |> merge_css
-    
+
     let make_deps (deps:assoc_graph) =
       let deps_w_positions =
         let open Gg in
@@ -654,15 +652,15 @@ svg {
         )
       in
       let direct_deps_edges, direct_deps_edges_css =
-        make_direct_deps_edges ~deps_w_positions 
-      and direct_deps_nodes = make_direct_deps_nodes ~deps_w_positions 
+        make_direct_deps_edges ~deps_w_positions
+      and direct_deps_nodes = make_direct_deps_nodes ~deps_w_positions
       and layer2_deps = make_layer2_deps ~deps_w_positions
-      and shared_deps_css = make_shared_deps_css ~deps_w_positions 
+      and shared_deps_css = make_shared_deps_css ~deps_w_positions
       in
       let svg = direct_deps_edges @ direct_deps_nodes @ layer2_deps in
       let css = merge_css [ direct_deps_edges_css; shared_deps_css ] in
       svg, css
-    
+
     let svg_defs = Svg.[ defs [
       radialGradient ~a:[
         a_id "gradient_01";
@@ -704,15 +702,15 @@ svg {
       Format.fprintf ppf "%a@." (Tyxml_svg.pp ()) html
 
   end
-  
+
   module Html = struct
 
     module H = Tyxml_html
 
     type t = H.doc
 
-    let merge_css = String.concat "\n" 
-    
+    let merge_css = String.concat "\n"
+
     let of_assoc ?(override_css="") (graph:assoc_graph) : t =
       let svg = Svg.of_assoc graph in
       H.html
@@ -724,7 +722,7 @@ svg {
 
     let pp ppf html =
       Format.fprintf ppf "%a@." (Tyxml_html.pp ()) html
-    
+
   end
-  
+
 end
