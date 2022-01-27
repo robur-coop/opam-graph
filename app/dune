@@ -1,4 +1,4 @@
 (executable
  (name main)
  (public_name opam_graph)
- (libraries cmdliner logs logs.fmt opam-graph))
+ (libraries cmdliner logs logs.fmt fmt.cli fmt.tty logs.cli opam-graph))
