@@ -50,7 +50,11 @@ let transitive =
 let formats = [ "html", `Html ; "dot", `Dot ; "dot-ui", `Dot_ui ; "text", `Text ]
 
 let output_format =
-  let doc = "Output format" in
+  let doc =
+    let formats_str =
+      formats |> List.map fst |> String.concat ", "
+    in
+    Printf.sprintf "Output format. Can be one of: %s." formats_str in
   Arg.(value & opt (Arg.enum formats) `Text & info [ "output-format" ] ~doc)
 
 let file =
