@@ -1,0 +1,30 @@
+opam-version: "2.0"
+maintainer: "Robur <team@robur.coop>"
+authors: ["Robur <team@robur.coop>"]
+homepage: "https://git.robur.io/robur/opam-graph"
+dev-repo: "git+https://git.robur.io/robur/opam-graph.git"
+bug-reports: "https://github.com/roburio/opam-graph/issues"
+license: "ISC"
+
+depends: [
+  "ocaml" {>= "4.08.0"}
+  "dune" {>= "2.0.0"}
+  "cmdliner"
+  "fmt" {>= "0.8.7"}
+  "logs"
+  "opam-core"
+  "opam-format"
+  "ocamldot"
+  "rresult"
+  "tyxml"
+  "gg"
+]
+build: [
+  ["dune" "subst"] {dev}
+  ["dune" "build" "-p" name "-j" jobs]
+]
+
+synopsis: "Graphing dependencies of opam packages"
+description: """
+This package outputs graphs (in svg and dot) of opam packages.
+"""

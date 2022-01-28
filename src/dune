@@ -1,4 +1,5 @@
 (library
  (name opam_graph)
  (public_name opam-graph)
- (libraries opam-core opam-format))
+ (libraries opam-core opam-format dot rresult tyxml gg)
+ )
