@@ -263,7 +263,7 @@ svg {
 }
 
 line {
-  stroke-width: 0.004;
+  stroke-width: 0.4;
   stroke: bisque;
 }
 
@@ -313,8 +313,8 @@ svg {
       y : float;
     }
 
-    let center = { x = 0.5; y = 0.5 }
-    let root_radius = 0.015
+    let center = { x = 50.; y = 50. }
+    let root_radius = 1.5
 
     module Unit = struct
 
@@ -490,6 +490,7 @@ svg {
       in
       svg, css
 
+    (*goto values might need to be updated to fit new viewbox*)
     let make_layer2_nodes_spiral ~layer2_deps ~layer2_deps_center =
       let open Gg in
       let dot_radius = root_radius *. 0.25 in
@@ -506,7 +507,6 @@ svg {
         make_node ~pos ~radius:dot_radius ~text ~classes
       )
 
-    (*goto implement as iterative search*)
     let grid_pos ~cell_width i =
       let open Gg in
       let north = V2.v 0. cell_width in
@@ -554,7 +554,7 @@ svg {
 
     let make_layer2_nodes_grid ~layer2_deps ~layer2_deps_center =
       let open Gg in
-      let dot_radius = 0.005 in
+      let dot_radius = 0.5 in
       let cell_width = dot_radius *. 2.5 in
       layer2_deps |> List.mapi (fun i layer2_dep ->
         let pos = V2.(layer2_deps_center + grid_pos ~cell_width i) in
@@ -585,7 +585,7 @@ svg {
             let bg =
               let pos =
                 { x = V2.x layer2_deps_center; y = V2.y layer2_deps_center }
-              and radius = sqrt (float (List.length layer2_deps) +. 1.) *. 0.0115
+              and radius = sqrt (float (List.length layer2_deps) +. 1.) *. 1.15
               and text = ""
               and classes = [ "layer2_deps"; "bg"; dep.name ] in
               make_node ~pos ~radius ~text ~classes
@@ -645,7 +645,7 @@ svg {
         let diff_angle = Float.two_pi /. float len_deps in
         deps |> List.mapi (fun i (dep, layer2_deps) ->
           let angle = diff_angle *. float i in
-          let dist_center = 0.2 in
+          let dist_center = 20. in
           let x = cos angle *. dist_center +. center.x
           and y = sin angle *. dist_center +. center.y in
           ((dep, { x; y }), layer2_deps)
@@ -693,7 +693,7 @@ svg {
           make_node ~pos ~radius ~text ~classes
         in
         let deps_svgs, deps_css = make_deps layer2_deps in
-        let svg_attr = [ Svg.a_viewBox (0., 0., 1., 1.) ] in
+        let svg_attr = [ Svg.a_viewBox (0., 0., 100., 100.) ] in
         let svg_content = svg_defs @ (root_svg :: deps_svgs) in
         let css = merge_css [ initial_css; deps_css ] in
         { svg_content; svg_attr; css }
