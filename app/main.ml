@@ -62,7 +62,8 @@ let file =
   Arg.(required & pos 0 (some file) None & info [ ] ~doc ~docv:"FILE")
 
 let cmd =
-  Term.(const jump $ setup_log $ transitive $ file $ output_format),
-  Term.info "opam_graph" ~version:"%%VERSION%%"
+  let term = Term.(const jump $ setup_log $ transitive $ file $ output_format) in
+  let info = Cmd.info "opam_graph" ~version:"%%VERSION%%" in
+  Cmd.v info term
 
-let () = match Term.eval cmd with `Ok () -> exit 0 | _ -> exit 1
+let () = Cmd.eval cmd |> exit
