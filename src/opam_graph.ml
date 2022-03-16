@@ -252,30 +252,32 @@ module Render = struct
 
     module Svg = Tyxml_svg
 
+    let scoped_class s = "deps-"^s
+
     (*> goto
       * change svg width+height to pct again - using vw+vh for development
       * svg width+height shouldn't be here for compatibility with user css?
     *)
     let initial_css = {|
 
-svg {
+.deps-svg-wrap {
   background : slategrey;
 }
 
-line {
+.deps-line {
   stroke-width: 0.4;
   stroke: bisque;
 }
 
-.layer2_deps.bg {
+.deps-layer2_deps.deps-bg {
   fill: url(#gradient_01);
 }
 
-.direct_dep.node:hover {
+.deps-direct_dep.deps-node:hover {
   transform: scale(2);
 }
 
-.layer2_dep.node:hover {
+.deps-layer2_dep.deps-node:hover {
   transform: scale(1.4);
 }
 
@@ -329,7 +331,7 @@ svg {
     let make_circle ~pos ~radius =
       Svg.[
         circle ~a:[
-          a_class ["node_circle"];
+          a_class [scoped_class "node_circle"];
           a_cx @@ Unit.none pos.x;
           a_cy @@ Unit.none pos.y;
           a_r @@ Unit.none radius;
@@ -359,13 +361,14 @@ svg {
       (*> todo; why is this not in Tyxml - browser support missing?*)
       let a_transform_origin = Svg.Unsafe.string_attrib "transform-origin" in
       let a = Svg.[
-        a_class ("node" :: classes);
+        a_class (scoped_class "node" :: classes);
         a_transform_origin @@ sprintf "%f %f" pos.x pos.y;
       ] in
       Svg.g ~a (title :: make_circle ~pos ~radius)
 
     let make_line ~pos0 ~pos1 =
       Svg.(line ~a:[
+        a_class [ scoped_class "line" ];
         a_x1 @@ Unit.none pos0.x;
         a_y1 @@ Unit.none pos0.y;
         a_x2 @@ Unit.none pos1.x;
@@ -373,7 +376,7 @@ svg {
       ]) []
 
     let make_edge ~pos0 ~pos1 ~text ~classes =
-      let a = [ Svg.a_class ("edge" :: classes) ] in
+      let a = Svg.[ a_class (scoped_class "edge" :: classes) ] in
       let title = make_title ~text in
       Svg.g ~a [ title; make_line ~pos0 ~pos1 ]
 
@@ -385,18 +388,24 @@ svg {
       deps_w_positions |> List.map (fun ((dep, pos), layer2_deps) ->
         let radius = root_radius *. 0.7
         and text = make_direct_dep_text dep ~layer2_deps
-        and classes = [ dep.name; "direct_dep" ] in
+        and classes = [
+          scoped_class dep.name;
+          scoped_class "direct_dep"
+        ] in
         make_node ~pos ~radius ~text ~classes
       )
 
-    let make_direct_dep_edge_css dep = sprintf {|
-.direct_dep.edge.%s:hover ~ .direct_dep.node.%s {
+    let make_direct_dep_edge_css dep =
+      let dep = scoped_class dep in
+      sprintf {|
+.deps-direct_dep.deps-edge.%s:hover ~ 
+.deps-direct_dep.deps-node.%s {
   transform: scale(2);
 }
-.direct_dep.edge.%s:hover ~ .layer2_deps.bg.%s {
+.deps-direct_dep.deps-edge.%s:hover ~ .deps-layer2_deps.deps-bg.%s {
   fill: dimgrey;
 }
-.direct_dep.node.%s:hover ~ .layer2_deps.bg.%s {
+.deps-direct_dep.deps-node.%s:hover ~ .deps-layer2_deps.deps-bg.%s {
   fill: dimgrey;
 }
 |} dep dep dep dep dep dep
@@ -424,7 +433,9 @@ svg {
       Svg.polygon ~a []
 
     let make_hitbox_direct_dep_edge ~pos0 ~pos1 ~n_edges ~text ~classes =
-      let a = [ Svg.a_class ("edge" :: "hitbox" :: classes) ] in
+      let a = Svg.[
+        a_class (scoped_class "edge" :: scoped_class "hitbox" :: classes)
+      ] in
       let title = make_title ~text in
       let left, right =
         let open Gg in
@@ -472,7 +483,10 @@ svg {
             { x = V2.x pos0; y = V2.y pos0 }, pos1_rel_angle
           in
           let text = make_direct_dep_text dep ~layer2_deps in
-          let classes = [ dep.name; "direct_dep" ] in
+          let classes = [
+            scoped_class dep.name;
+            scoped_class "direct_dep"
+          ] in
           let visual_svg = make_edge ~pos0 ~pos1 ~text ~classes in
           let hitbox_svg =
             make_hitbox_direct_dep_edge
@@ -503,7 +517,10 @@ svg {
         let pos = V2.(layer2_deps_center + pos_rel) in
         let pos = { x = V2.x pos; y = V2.y pos } in
         let text = layer2_dep.name in
-        let classes = [ layer2_dep.name; "layer2_dep" ] in
+        let classes = [
+          scoped_class layer2_dep.name;
+          scoped_class "layer2_dep";
+        ] in
         make_node ~pos ~radius:dot_radius ~text ~classes
       )
 
@@ -547,7 +564,7 @@ svg {
       (*> todo; why is this not in Tyxml - browser support missing?*)
       let a_transform_origin = Svg.Unsafe.string_attrib "transform-origin" in
       let a = Svg.[
-        a_class ("hitbox" :: classes);
+        a_class (scoped_class "hitbox" :: classes);
         a_transform_origin @@ sprintf "%f %f" center_pos.x center_pos.y;
       ] in
       Svg.g ~a (title :: make_square ~center_pos ~width)
@@ -560,7 +577,10 @@ svg {
         let pos = V2.(layer2_deps_center + grid_pos ~cell_width i) in
         let pos = { x = V2.x pos; y = V2.y pos } in
         let text = layer2_dep.name in
-        let classes = [ layer2_dep.name; "layer2_dep" ] in
+        let classes = [
+          scoped_class layer2_dep.name;
+          scoped_class "layer2_dep";
+        ] in
         let visual_svg = make_node ~pos ~radius:dot_radius ~text ~classes in
         let _hitbox_svg =
           make_hitbox_square ~text ~classes
@@ -587,7 +607,11 @@ svg {
                 { x = V2.x layer2_deps_center; y = V2.y layer2_deps_center }
               and radius = sqrt (float (List.length layer2_deps) +. 1.) *. 1.15
               and text = ""
-              and classes = [ "layer2_deps"; "bg"; dep.name ] in
+              and classes = [
+                scoped_class "layer2_deps";
+                scoped_class "bg";
+                scoped_class dep.name
+              ] in
               make_node ~pos ~radius ~text ~classes
             in
             let edge =
@@ -595,7 +619,7 @@ svg {
               let pos1 =
                 { x = V2.x layer2_deps_center; y = V2.y layer2_deps_center } in
               let text = "" in
-              let classes = [ "layer2_deps" ] in
+              let classes = [ scoped_class "layer2_deps" ] in
               make_edge ~pos0 ~pos1 ~text ~classes
             in
             edge :: bg :: nodes
@@ -605,10 +629,11 @@ svg {
     let make_shared_deps_css_aux ~dep ~shared_deps =
       shared_deps |> Seq.map (fun shared_dep ->
         sprintf {|
-.direct_dep.%s:hover ~ .node.layer2_dep.%s {
+.deps-direct_dep.%s:hover ~ 
+.deps-node.deps-layer2_dep.%s {
   fill: #5454ff;
 }
-        |} dep.name shared_dep
+        |} (scoped_class dep.name) (scoped_class shared_dep)
       )
       |> List.of_seq
       |> merge_css
@@ -689,11 +714,17 @@ svg {
           and text =
             sprintf "%s\nDirect dependencies: %d"
               root_pkg.name (List.length direct_deps)
-          and classes = [ root_pkg.name; "root" ] in
+          and classes = [
+            scoped_class root_pkg.name;
+            scoped_class "root"
+          ] in
           make_node ~pos ~radius ~text ~classes
         in
         let deps_svgs, deps_css = make_deps layer2_deps in
-        let svg_attr = [ Svg.a_viewBox (0., 0., 100., 100.) ] in
+        let svg_attr = Svg.[
+          a_viewBox (0., 0., 100., 100.);
+          a_class [ scoped_class "svg-wrap" ];
+        ] in
         let svg_content = svg_defs @ (root_svg :: deps_svgs) in
         let css = merge_css [ initial_css; deps_css ] in
         { svg_content; svg_attr; css }
