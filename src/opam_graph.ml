@@ -115,7 +115,22 @@ type assoc_node = {
   name : string;
   uniqueness_postfix : string;
 }
+
 type assoc_graph = (assoc_node * (assoc_node list)) list
+
+module SMap = Map.Make(String)
+
+type assoc_stats = int SMap.t
+
+let calc_sharing_stats (deps:graph) : assoc_stats =
+  Name_map.fold (fun _pkg deps acc_stats ->
+    Name_set.fold (fun pkg acc_stats ->
+      let pkg_name = OpamPackage.Name.to_string pkg in
+      acc_stats |> SMap.update pkg_name (function
+        | None -> Some 1
+        | Some count -> Some (succ count))
+    ) deps acc_stats
+  ) deps.nodes SMap.empty
 
 module Ui = struct
 
@@ -266,7 +281,15 @@ module Render = struct
 
 .deps-line {
   stroke-width: 0.4;
-  stroke: bisque;
+  stroke: #80746e;
+}
+
+.deps-node {
+  fill: #ccc;
+}
+
+.deps-root {
+  fill: black;
 }
 
 .deps-layer2_deps.deps-bg {
@@ -356,12 +379,16 @@ svg {
         ] []
       ]
 
-    let make_node ~pos ~radius ~text ~classes =
+    let make_node ?(with_node_class=true) ~pos ~radius ~text ~classes () =
       let title = make_title ~text in
       (*> todo; why is this not in Tyxml - browser support missing?*)
       let a_transform_origin = Svg.Unsafe.string_attrib "transform-origin" in
+      let classes =
+        if not with_node_class then classes else
+          scoped_class "node" :: classes
+      in
       let a = Svg.[
-        a_class (scoped_class "node" :: classes);
+        a_class classes;
         a_transform_origin @@ sprintf "%f %f" pos.x pos.y;
       ] in
       Svg.g ~a (title :: make_circle ~pos ~radius)
@@ -392,7 +419,7 @@ svg {
           scoped_class dep.name;
           scoped_class "direct_dep"
         ] in
-        make_node ~pos ~radius ~text ~classes
+        make_node ~pos ~radius ~text ~classes ()
       )
 
     let make_direct_dep_edge_css dep =
@@ -521,7 +548,7 @@ svg {
           scoped_class layer2_dep.name;
           scoped_class "layer2_dep";
         ] in
-        make_node ~pos ~radius:dot_radius ~text ~classes
+        make_node ~pos ~radius:dot_radius ~text ~classes ()
       )
 
     let grid_pos ~cell_width i =
@@ -581,7 +608,7 @@ svg {
           scoped_class layer2_dep.name;
           scoped_class "layer2_dep";
         ] in
-        let visual_svg = make_node ~pos ~radius:dot_radius ~text ~classes in
+        let visual_svg = make_node ~pos ~radius:dot_radius ~text ~classes () in
         let _hitbox_svg =
           make_hitbox_square ~text ~classes
             ~center_pos:pos
@@ -593,7 +620,7 @@ svg {
     let make_layer2_deps ~deps_w_positions =
       let open Gg in
       deps_w_positions |> List.mapi
-        (fun i ((dep, direct_dep_pos), layer2_deps) ->
+        (fun i ((_dep, direct_dep_pos), layer2_deps) ->
             let layer2_deps_center =
               let direct_dep_pos = V2.(v direct_dep_pos.x direct_dep_pos.y) in
               let center = V2.v center.x center.y in
@@ -610,9 +637,8 @@ svg {
               and classes = [
                 scoped_class "layer2_deps";
                 scoped_class "bg";
-                scoped_class dep.name
               ] in
-              make_node ~pos ~radius ~text ~classes
+              make_node ~with_node_class:false ~pos ~radius ~text ~classes ()
             in
             let edge =
               let pos0 = direct_dep_pos in
@@ -632,6 +658,7 @@ svg {
 .deps-direct_dep.%s:hover ~ 
 .deps-node.deps-layer2_dep.%s {
   fill: #5454ff;
+  filter: brightness(1.0) !important;
 }
         |} (scoped_class dep.name) (scoped_class shared_dep)
       )
@@ -695,16 +722,36 @@ svg {
       ] [
         stop ~a:[
           a_offset @@ `Percentage 0.;
-          a_stop_color "bisque"
+          a_stop_color "#80746e"; (* "bisque" *)
         ] [];
         stop ~a:[
           a_offset @@ `Percentage 100.;
-          a_stop_color "bisque"; a_stop_opacity 0.
+          a_stop_color "#80746e"; (* "bisque" *)
+          a_stop_opacity 0.
         ] []
       ]
     ]]
 
-    let of_assoc (graph:assoc_graph) : _ output =
+    let make_deps_sharing_css (sharing_stats:assoc_stats) =
+      let max_count =
+        SMap.fold
+          (fun _pkg count max_count -> Int.max max_count count)
+          sharing_stats 0
+        |> float 
+      in
+      SMap.fold (fun pkg count acc ->
+        let pct_count = float count /. max_count in (*goo*)
+        let css = sprintf "\
+          .%s.%s {\
+            filter: brightness(%f);\
+          }\
+        " (scoped_class "node") (scoped_class pkg) pct_count
+        in
+        css :: acc
+      ) sharing_stats []
+      |> merge_css
+    
+    let of_assoc ~(sharing_stats:assoc_stats) (graph:assoc_graph) : _ output =
       match graph with
       | [] -> { svg_content = []; svg_attr = []; css = "" }
       | (root_pkg, direct_deps) :: layer2_deps ->
@@ -718,15 +765,16 @@ svg {
             scoped_class root_pkg.name;
             scoped_class "root"
           ] in
-          make_node ~pos ~radius ~text ~classes
+          make_node ~pos ~radius ~text ~classes ()
         in
         let deps_svgs, deps_css = make_deps layer2_deps in
+        let deps_sharing_css = make_deps_sharing_css sharing_stats in
         let svg_attr = Svg.[
           a_viewBox (0., 0., 100., 100.);
           a_class [ scoped_class "svg-wrap" ];
         ] in
         let svg_content = svg_defs @ (root_svg :: deps_svgs) in
-        let css = merge_css [ initial_css; deps_css ] in
+        let css = merge_css [ initial_css; deps_css; deps_sharing_css ] in
         { svg_content; svg_attr; css }
 
     let pp ppf html =
@@ -742,8 +790,11 @@ svg {
 
     let merge_css = String.concat "\n"
 
-    let of_assoc ?(override_css="") (graph:assoc_graph) : t =
-      let svg = Svg.of_assoc graph in
+    let of_assoc
+        ?(override_css="")
+        ?(sharing_stats:assoc_stats=SMap.empty)
+        (graph:assoc_graph) : t =
+      let svg = Svg.of_assoc ~sharing_stats graph in
       H.html
         (H.head
             (H.title (H.txt "Dependencies"))
