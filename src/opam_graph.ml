@@ -774,6 +774,9 @@ svg {
     let make_deps_sharing_css (sharing_stats:assoc_stats) =
       let max_count =
         SMap.fold
+          (*> todo: exclude a certain set of pkgs from being taken into consideration here
+            .. and remember to limit their following pct-count too
+          *)
           (fun _pkg count max_count -> Int.max max_count count)
           sharing_stats 0
         |> float 
