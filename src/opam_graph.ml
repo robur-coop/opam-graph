@@ -304,6 +304,10 @@ module Render = struct
   transform: scale(1.4);
 }
 
+.deps-layer2_dep.deps-hitbox:hover + .deps-node {
+  transform: scale(1.4);
+}
+
 |}
 
     (* disabled CSS
@@ -609,11 +613,11 @@ svg {
           scoped_class "layer2_dep";
         ] in
         let visual_svg = make_node ~pos ~radius:dot_radius ~text ~classes () in
-        let _hitbox_svg =
+        let hitbox_svg =
           make_hitbox_square ~text ~classes
             ~center_pos:pos
             ~width:cell_width in
-        [ (* hitbox_svg;  *)visual_svg ]
+        [ hitbox_svg; visual_svg ]
       )
       |> List.flatten
 
