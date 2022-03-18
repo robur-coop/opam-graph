@@ -421,6 +421,14 @@ svg {
         (List.length layer2_deps)
         (SMap.find_opt dep.name sharing_stats |> Option.value ~default:0)
 
+    (*> todo add amount of direct deps?*)
+    let make_layer2_dep_text dep ~(sharing_stats:assoc_stats) =
+      sprintf
+        "Indirect dependency: %s\n\
+         Amount of reverse dependencies: %d"
+        dep
+        (SMap.find_opt dep sharing_stats |> Option.value ~default:0)
+
     let make_direct_deps_nodes ~deps_w_positions ~(sharing_stats:assoc_stats) =
       deps_w_positions |> List.map (fun ((dep, pos), layer2_deps) ->
         let radius = root_radius *. 0.7
@@ -546,7 +554,10 @@ svg {
       svg, css
 
     (*goto values might need to be updated to fit new viewbox*)
-    let make_layer2_nodes_spiral ~layer2_deps ~layer2_deps_center =
+    let make_layer2_nodes_spiral
+        ~layer2_deps
+        ~layer2_deps_center
+        ~(sharing_stats:assoc_stats) =
       let open Gg in
       let dot_radius = root_radius *. 0.25 in
       layer2_deps |> List.mapi (fun i' layer2_dep ->
@@ -557,7 +568,8 @@ svg {
         let pos_rel = V2.(v pos_radius pos_angle |> of_polar) in
         let pos = V2.(layer2_deps_center + pos_rel) in
         let pos = { x = V2.x pos; y = V2.y pos } in
-        let text = layer2_dep.name in
+        let text =
+          make_layer2_dep_text layer2_dep.name ~sharing_stats in
         let classes = [
           scoped_class layer2_dep.name;
           scoped_class "layer2_dep";
@@ -610,14 +622,17 @@ svg {
       ] in
       Svg.g ~a (title :: make_square ~center_pos ~width)
 
-    let make_layer2_nodes_grid ~layer2_deps ~layer2_deps_center =
+    let make_layer2_nodes_grid
+        ~layer2_deps
+        ~layer2_deps_center
+        ~(sharing_stats:assoc_stats) =
       let open Gg in
       let dot_radius = 0.5 in
       let cell_width = dot_radius *. 2.5 in
       layer2_deps |> List.mapi (fun i layer2_dep ->
         let pos = V2.(layer2_deps_center + grid_pos ~cell_width i) in
         let pos = { x = V2.x pos; y = V2.y pos } in
-        let text = layer2_dep.name in
+        let text = make_layer2_dep_text layer2_dep.name ~sharing_stats in
         let classes = [
           scoped_class layer2_dep.name;
           scoped_class "layer2_dep";
@@ -631,7 +646,7 @@ svg {
       )
       |> List.flatten
 
-    let make_layer2_deps ~deps_w_positions =
+    let make_layer2_deps ~deps_w_positions ~(sharing_stats:assoc_stats) =
       let open Gg in
       deps_w_positions |> List.mapi
         (fun i ((_dep, direct_dep_pos), layer2_deps) ->
@@ -642,7 +657,12 @@ svg {
               in
               V2.(mult * (direct_dep_pos - center) + center)
             in
-            let nodes = make_layer2_nodes_grid ~layer2_deps ~layer2_deps_center in
+            let nodes =
+              make_layer2_nodes_grid
+                ~layer2_deps
+                ~layer2_deps_center
+                ~sharing_stats
+            in
             let bg =
               let pos =
                 { x = V2.x layer2_deps_center; y = V2.y layer2_deps_center }
@@ -725,7 +745,7 @@ svg {
         make_direct_deps_nodes
           ~sharing_stats
           ~deps_w_positions
-      and layer2_deps = make_layer2_deps ~deps_w_positions
+      and layer2_deps = make_layer2_deps ~deps_w_positions ~sharing_stats
       and shared_deps_css = make_shared_deps_css ~deps_w_positions
       in
       let svg = direct_deps_edges @ direct_deps_nodes @ layer2_deps in
