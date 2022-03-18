@@ -411,14 +411,19 @@ svg {
       let title = make_title ~text in
       Svg.g ~a [ title; make_line ~pos0 ~pos1 ]
 
-    let make_direct_dep_text dep ~layer2_deps =
-      sprintf "Direct dependency: %s\nDirect dependencies: %d"
-        dep.name (List.length layer2_deps)
+    let make_direct_dep_text dep ~layer2_deps ~(sharing_stats:assoc_stats) =
+      sprintf
+        "Direct dependency: %s\n\
+         Amount of direct dependencies: %d\n\
+         Amount of reverse dependencies: %d"
+        dep.name
+        (List.length layer2_deps)
+        (SMap.find_opt dep.name sharing_stats |> Option.value ~default:0)
 
-    let make_direct_deps_nodes ~deps_w_positions =
+    let make_direct_deps_nodes ~deps_w_positions ~(sharing_stats:assoc_stats) =
       deps_w_positions |> List.map (fun ((dep, pos), layer2_deps) ->
         let radius = root_radius *. 0.7
-        and text = make_direct_dep_text dep ~layer2_deps
+        and text = make_direct_dep_text dep ~layer2_deps ~sharing_stats
         and classes = [
           scoped_class dep.name;
           scoped_class "direct_dep"
@@ -497,7 +502,7 @@ svg {
       in
       Svg.g ~a [ title; make_triangle ~top:pos0 ~left ~right ]
 
-    let make_direct_deps_edges ~deps_w_positions =
+    let make_direct_deps_edges ~deps_w_positions ~(sharing_stats:assoc_stats) =
       let open Gg in
       let n_edges = deps_w_positions |> List.length in
       let svg =
@@ -513,7 +518,11 @@ svg {
             let pos0 = V2.(pos0_rel + center) in
             { x = V2.x pos0; y = V2.y pos0 }, pos1_rel_angle
           in
-          let text = make_direct_dep_text dep ~layer2_deps in
+          let text =
+            make_direct_dep_text dep
+              ~layer2_deps
+              ~sharing_stats
+          in
           let classes = [
             scoped_class dep.name;
             scoped_class "direct_dep"
@@ -694,7 +703,7 @@ svg {
       )
       |> merge_css
 
-    let make_deps (deps:assoc_graph) =
+    let make_deps ~(sharing_stats:assoc_stats) (deps:assoc_graph) =
       let deps_w_positions =
         let open Gg in
         let len_deps = List.length deps in
@@ -708,8 +717,13 @@ svg {
         )
       in
       let direct_deps_edges, direct_deps_edges_css =
-        make_direct_deps_edges ~deps_w_positions
-      and direct_deps_nodes = make_direct_deps_nodes ~deps_w_positions
+        make_direct_deps_edges
+          ~deps_w_positions
+          ~sharing_stats
+      and direct_deps_nodes =
+        make_direct_deps_nodes
+          ~sharing_stats
+          ~deps_w_positions
       and layer2_deps = make_layer2_deps ~deps_w_positions
       and shared_deps_css = make_shared_deps_css ~deps_w_positions
       in
@@ -771,7 +785,8 @@ svg {
           ] in
           make_node ~pos ~radius ~text ~classes ()
         in
-        let deps_svgs, deps_css = make_deps layer2_deps in
+        let deps_svgs, deps_css =
+          make_deps ~sharing_stats layer2_deps in
         let deps_sharing_css = make_deps_sharing_css sharing_stats in
         let svg_attr = Svg.[
           a_viewBox (0., 0., 100., 100.);
