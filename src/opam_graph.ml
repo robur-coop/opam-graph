@@ -79,7 +79,7 @@ let pp_graph ppf graph =
                                (Name_set.elements deps))))
     graph.nodes
 
-let dependencies ?(transitive=false) (switch : OpamFile.SwitchExport.t) =
+let dependencies ~transitive (switch : OpamFile.SwitchExport.t) =
   let root_pkg = root switch in
   let top = root_pkg.OpamPackage.name in
   let graph = { top ; nodes = Name_map.empty } in
@@ -124,9 +124,9 @@ type assoc_stats = int SMap.t
 
 let calc_sharing_stats (deps:graph) : assoc_stats =
   Name_map.fold (fun _pkg deps acc_stats ->
-    Name_set.fold (fun pkg acc_stats ->
-      let pkg_name = OpamPackage.Name.to_string pkg in
-      acc_stats |> SMap.update pkg_name (function
+    Name_set.fold (fun dep acc_stats ->
+      let dep_name = OpamPackage.Name.to_string dep in
+      acc_stats |> SMap.update dep_name (function
         | None -> Some 1
         | Some count -> Some (succ count))
     ) deps acc_stats
@@ -136,7 +136,7 @@ module Ui = struct
 
   let dependencies ?(transitive=true) data : assoc_graph =
     (*> todo can be made more efficient*)
-    let all_direct_deps = dependencies data in
+    let all_direct_deps = dependencies ~transitive:false data in
     let root = all_direct_deps.top in
     let root_str = OpamPackage.Name.to_string root
     in
@@ -144,9 +144,10 @@ module Ui = struct
       all_direct_deps.nodes
       |> Name_map.find root
     in
-    (*> todo can be made more efficient*)
     let all_transitive_deps =
-      dependencies ~transitive data in
+      if transitive = false then all_direct_deps else 
+        dependencies ~transitive data
+    in
     let direct_deps_w_transitive_deps =
       direct_deps
       |> Name_set.elements
