@@ -773,16 +773,15 @@ svg {
 
     let make_deps_sharing_css (sharing_stats:assoc_stats) =
       let max_count =
+        (*> todo; would be more correct to use the count of nodes in dep-graph*)
         SMap.fold
-          (*> todo: exclude a certain set of pkgs from being taken into consideration here
-            .. and remember to limit their following pct-count too
-          *)
           (fun _pkg count max_count -> Int.max max_count count)
           sharing_stats 0
-        |> float 
+        |> float
+        |> ( *. ) 0.2
       in
       SMap.fold (fun pkg count acc ->
-        let pct_count = float count /. max_count in (*goo*)
+        let pct_count = Float.min 1. (float count /. max_count) in
         let css = sprintf "\
           .%s.%s {\
             filter: brightness(%f);\
