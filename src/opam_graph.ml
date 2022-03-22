@@ -775,7 +775,7 @@ svg {
       let max_count =
         (*> todo; would be more correct to use the count of nodes in dep-graph*)
         SMap.fold
-          (fun _pkg count max_count -> Int.max max_count count)
+          (fun _pkg count max_count -> max max_count count)
           sharing_stats 0
         |> float
         |> ( *. ) 0.2
