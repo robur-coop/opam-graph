@@ -79,7 +79,7 @@ let pp_graph ppf graph =
                                (Name_set.elements deps))))
     graph.nodes
 
-let dependencies ?(transitive=false) (switch : OpamFile.SwitchExport.t) =
+let dependencies ~transitive (switch : OpamFile.SwitchExport.t) =
   let root_pkg = root switch in
   let top = root_pkg.OpamPackage.name in
   let graph = { top ; nodes = Name_map.empty } in
@@ -115,13 +115,28 @@ type assoc_node = {
   name : string;
   uniqueness_postfix : string;
 }
+
 type assoc_graph = (assoc_node * (assoc_node list)) list
+
+module SMap = Map.Make(String)
+
+type assoc_stats = int SMap.t
+
+let calc_sharing_stats (deps:graph) : assoc_stats =
+  Name_map.fold (fun _pkg deps acc_stats ->
+    Name_set.fold (fun dep acc_stats ->
+      let dep_name = OpamPackage.Name.to_string dep in
+      acc_stats |> SMap.update dep_name (function
+        | None -> Some 1
+        | Some count -> Some (succ count))
+    ) deps acc_stats
+  ) deps.nodes SMap.empty
 
 module Ui = struct
 
   let dependencies ?(transitive=true) data : assoc_graph =
     (*> todo can be made more efficient*)
-    let all_direct_deps = dependencies data in
+    let all_direct_deps = dependencies ~transitive:false data in
     let root = all_direct_deps.top in
     let root_str = OpamPackage.Name.to_string root
     in
@@ -129,9 +144,10 @@ module Ui = struct
       all_direct_deps.nodes
       |> Name_map.find root
     in
-    (*> todo can be made more efficient*)
     let all_transitive_deps =
-      dependencies ~transitive data in
+      if transitive = false then all_direct_deps else 
+        dependencies ~transitive data
+    in
     let direct_deps_w_transitive_deps =
       direct_deps
       |> Name_set.elements
@@ -266,7 +282,15 @@ module Render = struct
 
 .deps-line {
   stroke-width: 0.4;
-  stroke: bisque;
+  stroke: #80746e;
+}
+
+.deps-node {
+  fill: #ccc;
+}
+
+.deps-root {
+  fill: black;
 }
 
 .deps-layer2_deps.deps-bg {
@@ -278,6 +302,10 @@ module Render = struct
 }
 
 .deps-layer2_dep.deps-node:hover {
+  transform: scale(1.4);
+}
+
+.deps-layer2_dep.deps-hitbox:hover + .deps-node {
   transform: scale(1.4);
 }
 
@@ -356,12 +384,16 @@ svg {
         ] []
       ]
 
-    let make_node ~pos ~radius ~text ~classes =
+    let make_node ?(with_node_class=true) ~pos ~radius ~text ~classes () =
       let title = make_title ~text in
       (*> todo; why is this not in Tyxml - browser support missing?*)
       let a_transform_origin = Svg.Unsafe.string_attrib "transform-origin" in
+      let classes =
+        if not with_node_class then classes else
+          scoped_class "node" :: classes
+      in
       let a = Svg.[
-        a_class (scoped_class "node" :: classes);
+        a_class classes;
         a_transform_origin @@ sprintf "%f %f" pos.x pos.y;
       ] in
       Svg.g ~a (title :: make_circle ~pos ~radius)
@@ -380,19 +412,32 @@ svg {
       let title = make_title ~text in
       Svg.g ~a [ title; make_line ~pos0 ~pos1 ]
 
-    let make_direct_dep_text dep ~layer2_deps =
-      sprintf "Direct dependency: %s\nDirect dependencies: %d"
-        dep.name (List.length layer2_deps)
+    let make_direct_dep_text dep ~layer2_deps ~(sharing_stats:assoc_stats) =
+      sprintf
+        "Direct dependency: %s\n\
+         Amount of direct dependencies: %d\n\
+         Amount of reverse dependencies: %d"
+        dep.name
+        (List.length layer2_deps)
+        (SMap.find_opt dep.name sharing_stats |> Option.value ~default:0)
 
-    let make_direct_deps_nodes ~deps_w_positions =
+    (*> todo add amount of direct deps?*)
+    let make_layer2_dep_text dep ~(sharing_stats:assoc_stats) =
+      sprintf
+        "Indirect dependency: %s\n\
+         Amount of reverse dependencies: %d"
+        dep
+        (SMap.find_opt dep sharing_stats |> Option.value ~default:0)
+
+    let make_direct_deps_nodes ~deps_w_positions ~(sharing_stats:assoc_stats) =
       deps_w_positions |> List.map (fun ((dep, pos), layer2_deps) ->
         let radius = root_radius *. 0.7
-        and text = make_direct_dep_text dep ~layer2_deps
+        and text = make_direct_dep_text dep ~layer2_deps ~sharing_stats
         and classes = [
           scoped_class dep.name;
           scoped_class "direct_dep"
         ] in
-        make_node ~pos ~radius ~text ~classes
+        make_node ~pos ~radius ~text ~classes ()
       )
 
     let make_direct_dep_edge_css dep =
@@ -466,7 +511,7 @@ svg {
       in
       Svg.g ~a [ title; make_triangle ~top:pos0 ~left ~right ]
 
-    let make_direct_deps_edges ~deps_w_positions =
+    let make_direct_deps_edges ~deps_w_positions ~(sharing_stats:assoc_stats) =
       let open Gg in
       let n_edges = deps_w_positions |> List.length in
       let svg =
@@ -482,7 +527,11 @@ svg {
             let pos0 = V2.(pos0_rel + center) in
             { x = V2.x pos0; y = V2.y pos0 }, pos1_rel_angle
           in
-          let text = make_direct_dep_text dep ~layer2_deps in
+          let text =
+            make_direct_dep_text dep
+              ~layer2_deps
+              ~sharing_stats
+          in
           let classes = [
             scoped_class dep.name;
             scoped_class "direct_dep"
@@ -505,7 +554,10 @@ svg {
       svg, css
 
     (*goto values might need to be updated to fit new viewbox*)
-    let make_layer2_nodes_spiral ~layer2_deps ~layer2_deps_center =
+    let make_layer2_nodes_spiral
+        ~layer2_deps
+        ~layer2_deps_center
+        ~(sharing_stats:assoc_stats) =
       let open Gg in
       let dot_radius = root_radius *. 0.25 in
       layer2_deps |> List.mapi (fun i' layer2_dep ->
@@ -516,12 +568,13 @@ svg {
         let pos_rel = V2.(v pos_radius pos_angle |> of_polar) in
         let pos = V2.(layer2_deps_center + pos_rel) in
         let pos = { x = V2.x pos; y = V2.y pos } in
-        let text = layer2_dep.name in
+        let text =
+          make_layer2_dep_text layer2_dep.name ~sharing_stats in
         let classes = [
           scoped_class layer2_dep.name;
           scoped_class "layer2_dep";
         ] in
-        make_node ~pos ~radius:dot_radius ~text ~classes
+        make_node ~pos ~radius:dot_radius ~text ~classes ()
       )
 
     let grid_pos ~cell_width i =
@@ -569,31 +622,34 @@ svg {
       ] in
       Svg.g ~a (title :: make_square ~center_pos ~width)
 
-    let make_layer2_nodes_grid ~layer2_deps ~layer2_deps_center =
+    let make_layer2_nodes_grid
+        ~layer2_deps
+        ~layer2_deps_center
+        ~(sharing_stats:assoc_stats) =
       let open Gg in
       let dot_radius = 0.5 in
       let cell_width = dot_radius *. 2.5 in
       layer2_deps |> List.mapi (fun i layer2_dep ->
         let pos = V2.(layer2_deps_center + grid_pos ~cell_width i) in
         let pos = { x = V2.x pos; y = V2.y pos } in
-        let text = layer2_dep.name in
+        let text = make_layer2_dep_text layer2_dep.name ~sharing_stats in
         let classes = [
           scoped_class layer2_dep.name;
           scoped_class "layer2_dep";
         ] in
-        let visual_svg = make_node ~pos ~radius:dot_radius ~text ~classes in
-        let _hitbox_svg =
+        let visual_svg = make_node ~pos ~radius:dot_radius ~text ~classes () in
+        let hitbox_svg =
           make_hitbox_square ~text ~classes
             ~center_pos:pos
             ~width:cell_width in
-        [ (* hitbox_svg;  *)visual_svg ]
+        [ hitbox_svg; visual_svg ]
       )
       |> List.flatten
 
-    let make_layer2_deps ~deps_w_positions =
+    let make_layer2_deps ~deps_w_positions ~(sharing_stats:assoc_stats) =
       let open Gg in
       deps_w_positions |> List.mapi
-        (fun i ((dep, direct_dep_pos), layer2_deps) ->
+        (fun i ((_dep, direct_dep_pos), layer2_deps) ->
             let layer2_deps_center =
               let direct_dep_pos = V2.(v direct_dep_pos.x direct_dep_pos.y) in
               let center = V2.v center.x center.y in
@@ -601,7 +657,12 @@ svg {
               in
               V2.(mult * (direct_dep_pos - center) + center)
             in
-            let nodes = make_layer2_nodes_grid ~layer2_deps ~layer2_deps_center in
+            let nodes =
+              make_layer2_nodes_grid
+                ~layer2_deps
+                ~layer2_deps_center
+                ~sharing_stats
+            in
             let bg =
               let pos =
                 { x = V2.x layer2_deps_center; y = V2.y layer2_deps_center }
@@ -610,9 +671,8 @@ svg {
               and classes = [
                 scoped_class "layer2_deps";
                 scoped_class "bg";
-                scoped_class dep.name
               ] in
-              make_node ~pos ~radius ~text ~classes
+              make_node ~with_node_class:false ~pos ~radius ~text ~classes ()
             in
             let edge =
               let pos0 = direct_dep_pos in
@@ -632,6 +692,7 @@ svg {
 .deps-direct_dep.%s:hover ~ 
 .deps-node.deps-layer2_dep.%s {
   fill: #5454ff;
+  filter: brightness(1.0) !important;
 }
         |} (scoped_class dep.name) (scoped_class shared_dep)
       )
@@ -663,7 +724,7 @@ svg {
       )
       |> merge_css
 
-    let make_deps (deps:assoc_graph) =
+    let make_deps ~(sharing_stats:assoc_stats) (deps:assoc_graph) =
       let deps_w_positions =
         let open Gg in
         let len_deps = List.length deps in
@@ -677,9 +738,14 @@ svg {
         )
       in
       let direct_deps_edges, direct_deps_edges_css =
-        make_direct_deps_edges ~deps_w_positions
-      and direct_deps_nodes = make_direct_deps_nodes ~deps_w_positions
-      and layer2_deps = make_layer2_deps ~deps_w_positions
+        make_direct_deps_edges
+          ~deps_w_positions
+          ~sharing_stats
+      and direct_deps_nodes =
+        make_direct_deps_nodes
+          ~sharing_stats
+          ~deps_w_positions
+      and layer2_deps = make_layer2_deps ~deps_w_positions ~sharing_stats
       and shared_deps_css = make_shared_deps_css ~deps_w_positions
       in
       let svg = direct_deps_edges @ direct_deps_nodes @ layer2_deps in
@@ -695,16 +761,38 @@ svg {
       ] [
         stop ~a:[
           a_offset @@ `Percentage 0.;
-          a_stop_color "bisque"
+          a_stop_color "#80746e"; (* "bisque" *)
         ] [];
         stop ~a:[
           a_offset @@ `Percentage 100.;
-          a_stop_color "bisque"; a_stop_opacity 0.
+          a_stop_color "#80746e"; (* "bisque" *)
+          a_stop_opacity 0.
         ] []
       ]
     ]]
 
-    let of_assoc (graph:assoc_graph) : _ output =
+    let make_deps_sharing_css (sharing_stats:assoc_stats) =
+      let max_count =
+        (*> todo; would be more correct to use the count of nodes in dep-graph*)
+        SMap.fold
+          (fun _pkg count max_count -> max max_count count)
+          sharing_stats 0
+        |> float
+        |> ( *. ) 0.2
+      in
+      SMap.fold (fun pkg count acc ->
+        let pct_count = Float.min 1. (float count /. max_count) in
+        let css = sprintf "\
+          .%s.%s {\
+            filter: brightness(%f);\
+          }\
+        " (scoped_class "node") (scoped_class pkg) pct_count
+        in
+        css :: acc
+      ) sharing_stats []
+      |> merge_css
+    
+    let of_assoc ~(sharing_stats:assoc_stats) (graph:assoc_graph) : _ output =
       match graph with
       | [] -> { svg_content = []; svg_attr = []; css = "" }
       | (root_pkg, direct_deps) :: layer2_deps ->
@@ -718,15 +806,17 @@ svg {
             scoped_class root_pkg.name;
             scoped_class "root"
           ] in
-          make_node ~pos ~radius ~text ~classes
+          make_node ~pos ~radius ~text ~classes ()
         in
-        let deps_svgs, deps_css = make_deps layer2_deps in
+        let deps_svgs, deps_css =
+          make_deps ~sharing_stats layer2_deps in
+        let deps_sharing_css = make_deps_sharing_css sharing_stats in
         let svg_attr = Svg.[
           a_viewBox (0., 0., 100., 100.);
           a_class [ scoped_class "svg-wrap" ];
         ] in
         let svg_content = svg_defs @ (root_svg :: deps_svgs) in
-        let css = merge_css [ initial_css; deps_css ] in
+        let css = merge_css [ initial_css; deps_css; deps_sharing_css ] in
         { svg_content; svg_attr; css }
 
     let pp ppf html =
@@ -742,8 +832,11 @@ svg {
 
     let merge_css = String.concat "\n"
 
-    let of_assoc ?(override_css="") (graph:assoc_graph) : t =
-      let svg = Svg.of_assoc graph in
+    let of_assoc
+        ?(override_css="")
+        ?(sharing_stats:assoc_stats=SMap.empty)
+        (graph:assoc_graph) : t =
+      let svg = Svg.of_assoc ~sharing_stats graph in
       H.html
         (H.head
             (H.title (H.txt "Dependencies"))
