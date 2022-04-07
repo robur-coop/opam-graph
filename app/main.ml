@@ -12,24 +12,39 @@ let read_file file =
   with _ -> invalid_arg ("Error opening file " ^ file)
 
 let jump () transitive file output_format =
+  let module G = Opam_graph in
   let switch = read_file file in
   let data = OpamFile.SwitchExport.read_from_string switch in
   match output_format with
   | `Text ->
-    let graph = Opam_graph.dependencies ~transitive data in
-    Format.printf "%a" Opam_graph.pp_graph graph
+    let graph = G.dependencies ~transitive data in
+    Format.printf "%a" G.pp_graph graph
   | `Dot ->
-    let graph = Opam_graph.dependencies ~transitive data in
-    let dot = Opam_graph.Render.Dot.of_graph graph in
-    Format.printf "%a" Opam_graph.Render.Dot.pp dot
+    let graph = G.dependencies ~transitive data in
+    let dot = G.Render.Dot.of_graph graph in
+    Format.printf "%a" G.Render.Dot.pp dot
   | `Dot_ui ->
-    let graph = Opam_graph.Ui.dependencies ~transitive data in
-    let dot = Opam_graph.Render.Dot.of_assoc graph in
-    Format.printf "%a" Opam_graph.Render.Dot.pp dot
+    let graph = G.Ui.dependencies ~transitive data in
+    let dot = G.Render.Dot.of_assoc graph in
+    Format.printf "%a" G.Render.Dot.pp dot
   | `Html ->
-    let graph = Opam_graph.Ui.dependencies ~transitive data in
-    let html = Opam_graph.Render.Html.of_assoc graph in
-    Format.printf "%a" Opam_graph.Render.Html.pp html
+    let graph = G.Ui.dependencies ~transitive data in
+    let sharing_stats =
+      data
+      |> G.dependencies ~transitive:false
+      |> G.calc_sharing_stats in
+    let override_css = "\
+      .deps-svg-wrap {\
+        background: rgb(60, 60, 87); \
+      }\
+    "
+    in
+    let html =
+      G.Render.Html.of_assoc
+        ~override_css
+        ~sharing_stats graph
+    in
+    Format.printf "%a" G.Render.Html.pp html
 
 let setup_log style_renderer level =
   Fmt_tty.setup_std_outputs ?style_renderer ();
