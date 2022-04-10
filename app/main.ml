@@ -78,7 +78,7 @@ let file =
 
 let cmd =
   let term = Term.(const jump $ setup_log $ transitive $ file $ output_format) in
-  let info = Cmd.info "opam_graph" ~version:"%%VERSION%%" in
+  let info = Cmd.info "opam-graph" ~version:"%%VERSION%%" in
   Cmd.v info term
 
 let () = Cmd.eval cmd |> exit
