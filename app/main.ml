@@ -77,8 +77,15 @@ let file =
   Arg.(required & pos 0 (some file) None & info [ ] ~doc ~docv:"FILE")
 
 let cmd =
-  let term = Term.(const jump $ setup_log $ transitive $ file $ output_format) in
-  let info = Cmd.info "opam-graph" ~version:"%%VERSION%%" in
+  let term = Term.(
+    const jump
+    $ setup_log
+    $ transitive
+    $ file
+    $ output_format
+  ) in
+  let version = Fmt.str "%d" Opam_graph.visualization_version in
+  let info = Cmd.info "opam-graph" ~version in
   Cmd.v info term
 
 let () = Cmd.eval cmd |> exit
