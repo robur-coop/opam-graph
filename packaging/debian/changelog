@@ -1,0 +1,5 @@
+opam-graph (%%VERSION_NUM%%) unstable; urgency=medium
+
+  * Initial release
+
+  --Robur team <team@robur.coop>

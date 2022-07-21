@@ -1,0 +1,12 @@
+Package: opam-graph
+Version: %%VERSION_NUM%%
+Section: unknown
+Priority: optional
+Maintainer: Robur Team <team@robur.coop>
+Stadnards-Version: 4.4.1
+Homepage: https://git.robur.io/robur/opam-graph
+Vcs-Browser: https://git.robur.io/robur/opam-graph
+Vsc-Git: https://git.robur.io/robur/opam-graph.git
+Architecture: FIXME
+Descrption: Graphing dependencies of opam packages
+  This package outputs graphs (in svg and dot) of opam packages.
