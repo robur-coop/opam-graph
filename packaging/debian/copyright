@@ -1,0 +1,8 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: opam-graph
+Upstream-Contact: Robur Team <team@robur.coop>
+Source: https://git.robur.io/robur/opam-graph
+
+Files: *
+Copyright: "Robur Team <team@robur.coop>"
+License: ISC
