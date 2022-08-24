@@ -8,7 +8,7 @@ if [ "$ORB_BUILDING_PACKAGE" != "opam-graph" -a "$OPAM_PACKAGE_NAME" != "" ]; th
 fi
 
 basedir=$(realpath "$(dirname "$0")"/../..)
-pdir=$basedir/package/FreeBSD
+pdir=$basedir/packaging/FreeBSD
 bdir=$basedir/_build/install/default/bin
 tmpd=$basedir/_build/stage
 manifest=$tmpd/+MANIFEST
