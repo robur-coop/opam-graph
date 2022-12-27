@@ -1,17 +1,15 @@
 
 let visualization_version = 1
-(** Remember to increment this when anything changes that can affect the 
+(** Remember to increment this when anything changes that can affect the
     visualization, e.g.:
       * algorithm change
       * UI change
-      * certain library-dependency changes 
+      * certain library-dependency changes
 *)
 
 let sprintf = Printf.sprintf
 
 module OSet = OpamPackage.Set
-
-type package = OpamPackage.t
 
 let packages (switch : OpamFile.SwitchExport.t) =
   assert (OSet.cardinal switch.selections.sel_pinned = 0);
@@ -87,26 +85,99 @@ let pp_graph ppf graph =
                                (Name_set.elements deps))))
     graph.nodes
 
+let deps_of_opam =
+  let open OpamParserTypes.FullPos in
+  let ( let* ) = Result.bind in
+  let extract_pkg = function
+    | { pelem = String s ; _ } -> Ok (OpamPackage.Name.of_string s)
+    | _ -> Error (`Msg "expected a string")
+  in
+  let extract_list = function
+    | { pelem = List { pelem = deps ; _ } ; _ } ->
+      List.fold_left (fun acc d ->
+          let* acc = acc in
+          let* dep = extract_pkg d in
+          Ok (Name_set.add dep acc))
+        (Ok Name_set.empty) deps
+    | _ -> Error (`Msg "expected a list of strings")
+  in
+  let extract_deps = function
+    | { pelem = List { pelem = [ name ; deps ] ; _ } ; _ } ->
+      let* name = extract_pkg name in
+      let* deps = extract_list deps in
+      Ok (name, deps)
+    | { pelem = List { pelem = _lbody ; _ } ; _ } ->
+      Error (`Msg "expected exactly two strings")
+    | _ -> Error (`Msg "expected a pair of strings")
+  in
+  function
+  | { pelem = List { pelem = lbody ; _ } ; _ } ->
+    let* data =
+      List.fold_left (fun acc v ->
+          let* acc = acc in
+          let* deps = extract_deps v in
+          Ok (deps :: acc))
+        (Ok []) lbody
+    in
+    Ok (List.rev data)
+  | _ -> Error (`Msg "expected a list")
+
+let retrieve_deps switch top =
+  let orb_deps = "x-orb-dependencies" in
+  let pkg_opam_file = opam_file switch top in
+  match OpamFile.OPAM.extended pkg_opam_file orb_deps deps_of_opam with
+  | None -> None
+  | Some Error `Msg _msg -> None
+  | Some Ok data ->
+    Some
+      (List.fold_left (fun acc (name, deps) ->
+           Name_map.add name deps acc)
+          Name_map.empty data)
+
 let dependencies ~transitive (switch : OpamFile.SwitchExport.t) =
   let root_pkg = root switch in
   let top = root_pkg.OpamPackage.name in
   let graph = { top ; nodes = Name_map.empty } in
+  let dep_map = retrieve_deps switch top in
   let available = switch.selections.sel_installed in
   let rec find_deps graph work =
     match Name_set.choose_opt work with
     | None -> graph
     | Some x ->
-      let deps = match transitive with
-        | true -> transitive_dependencies switch x
-        | false -> direct_dependencies switch x
-      in
       let deps =
-        deps
-        |> Name_set.filter (fun name ->
-          OpamPackage.Set.exists
-            (fun pkg -> pkg.OpamPackage.name = name)
-            available
-        )
+        match dep_map with
+        | None ->
+          let deps =
+            match transitive with
+            | true -> transitive_dependencies switch x
+            | false -> direct_dependencies switch x
+          in
+          deps
+          |> Name_set.filter (fun name ->
+              OpamPackage.Set.exists
+                (fun pkg -> pkg.OpamPackage.name = name)
+                  available
+            )
+        | Some map ->
+          let rec find_it seen work acc =
+            match Name_set.choose_opt work with
+            | None -> acc
+            | Some x ->
+              let seen = Name_set.add x seen
+              and work = Name_set.remove x work
+              in
+              match Name_map.find_opt x map with
+              | None -> find_it seen work acc
+              | Some deps ->
+                let work =
+                  if transitive then
+                    Name_set.union deps work
+                  else
+                    work
+                in
+                find_it seen work (Name_set.union deps acc)
+          in
+          find_it Name_set.empty (Name_set.singleton x) Name_set.empty
       in
       let graph = add_node graph x deps in
       let work =
@@ -153,7 +224,7 @@ module Ui = struct
       |> Name_map.find root
     in
     let all_transitive_deps =
-      if transitive = false then all_direct_deps else 
+      if transitive = false then all_direct_deps else
         dependencies ~transitive data
     in
     let direct_deps_w_transitive_deps =
@@ -451,7 +522,7 @@ svg {
     let make_direct_dep_edge_css dep =
       let dep = scoped_class dep in
       sprintf {|
-.deps-direct_dep.deps-edge.%s:hover ~ 
+.deps-direct_dep.deps-edge.%s:hover ~
 .deps-direct_dep.deps-node.%s {
   transform: scale(2);
 }
@@ -697,7 +768,7 @@ svg {
     let make_shared_deps_css_aux ~dep ~shared_deps =
       shared_deps |> Seq.map (fun shared_dep ->
         sprintf {|
-.deps-direct_dep.%s:hover ~ 
+.deps-direct_dep.%s:hover ~
 .deps-node.deps-layer2_dep.%s {
   fill: #5454ff;
   filter: brightness(1.0) !important;
@@ -799,7 +870,7 @@ svg {
         css :: acc
       ) sharing_stats []
       |> merge_css
-    
+
     let of_assoc ~(sharing_stats:assoc_stats) (graph:assoc_graph) : _ output =
       match graph with
       | [] -> { svg_content = []; svg_attr = []; css = "" }
