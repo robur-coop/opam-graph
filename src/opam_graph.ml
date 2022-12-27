@@ -85,26 +85,99 @@ let pp_graph ppf graph =
                                (Name_set.elements deps))))
     graph.nodes
 
+let deps_of_opam =
+  let open OpamParserTypes.FullPos in
+  let ( let* ) = Result.bind in
+  let extract_pkg = function
+    | { pelem = String s ; _ } -> Ok (OpamPackage.Name.of_string s)
+    | _ -> Error (`Msg "expected a string")
+  in
+  let extract_list = function
+    | { pelem = List { pelem = deps ; _ } ; _ } ->
+      List.fold_left (fun acc d ->
+          let* acc = acc in
+          let* dep = extract_pkg d in
+          Ok (Name_set.add dep acc))
+        (Ok Name_set.empty) deps
+    | _ -> Error (`Msg "expected a list of strings")
+  in
+  let extract_deps = function
+    | { pelem = List { pelem = [ name ; deps ] ; _ } ; _ } ->
+      let* name = extract_pkg name in
+      let* deps = extract_list deps in
+      Ok (name, deps)
+    | { pelem = List { pelem = _lbody ; _ } ; _ } ->
+      Error (`Msg "expected exactly two strings")
+    | _ -> Error (`Msg "expected a pair of strings")
+  in
+  function
+  | { pelem = List { pelem = lbody ; _ } ; _ } ->
+    let* data =
+      List.fold_left (fun acc v ->
+          let* acc = acc in
+          let* deps = extract_deps v in
+          Ok (deps :: acc))
+        (Ok []) lbody
+    in
+    Ok (List.rev data)
+  | _ -> Error (`Msg "expected a list")
+
+let retrieve_deps switch top =
+  let orb_deps = "x-orb-dependencies" in
+  let pkg_opam_file = opam_file switch top in
+  match OpamFile.OPAM.extended pkg_opam_file orb_deps deps_of_opam with
+  | None -> None
+  | Some Error `Msg _msg -> None
+  | Some Ok data ->
+    Some
+      (List.fold_left (fun acc (name, deps) ->
+           Name_map.add name deps acc)
+          Name_map.empty data)
+
 let dependencies ~transitive (switch : OpamFile.SwitchExport.t) =
   let root_pkg = root switch in
   let top = root_pkg.OpamPackage.name in
   let graph = { top ; nodes = Name_map.empty } in
+  let dep_map = retrieve_deps switch top in
   let available = switch.selections.sel_installed in
   let rec find_deps graph work =
     match Name_set.choose_opt work with
     | None -> graph
     | Some x ->
-      let deps = match transitive with
-        | true -> transitive_dependencies switch x
-        | false -> direct_dependencies switch x
-      in
       let deps =
-        deps
-        |> Name_set.filter (fun name ->
-          OpamPackage.Set.exists
-            (fun pkg -> pkg.OpamPackage.name = name)
-            available
-        )
+        match dep_map with
+        | None ->
+          let deps =
+            match transitive with
+            | true -> transitive_dependencies switch x
+            | false -> direct_dependencies switch x
+          in
+          deps
+          |> Name_set.filter (fun name ->
+              OpamPackage.Set.exists
+                (fun pkg -> pkg.OpamPackage.name = name)
+                  available
+            )
+        | Some map ->
+          let rec find_it seen work acc =
+            match Name_set.choose_opt work with
+            | None -> acc
+            | Some x ->
+              let seen = Name_set.add x seen
+              and work = Name_set.remove x work
+              in
+              match Name_map.find_opt x map with
+              | None -> find_it seen work acc
+              | Some deps ->
+                let work =
+                  if transitive then
+                    Name_set.union deps work
+                  else
+                    work
+                in
+                find_it seen work (Name_set.union deps acc)
+          in
+          find_it Name_set.empty (Name_set.singleton x) Name_set.empty
       in
       let graph = add_node graph x deps in
       let work =
