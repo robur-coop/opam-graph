@@ -1,10 +1,10 @@
 
 let visualization_version = 1
-(** Remember to increment this when anything changes that can affect the 
+(** Remember to increment this when anything changes that can affect the
     visualization, e.g.:
       * algorithm change
       * UI change
-      * certain library-dependency changes 
+      * certain library-dependency changes
 *)
 
 let sprintf = Printf.sprintf
@@ -153,7 +153,7 @@ module Ui = struct
       |> Name_map.find root
     in
     let all_transitive_deps =
-      if transitive = false then all_direct_deps else 
+      if transitive = false then all_direct_deps else
         dependencies ~transitive data
     in
     let direct_deps_w_transitive_deps =
@@ -451,7 +451,7 @@ svg {
     let make_direct_dep_edge_css dep =
       let dep = scoped_class dep in
       sprintf {|
-.deps-direct_dep.deps-edge.%s:hover ~ 
+.deps-direct_dep.deps-edge.%s:hover ~
 .deps-direct_dep.deps-node.%s {
   transform: scale(2);
 }
@@ -697,7 +697,7 @@ svg {
     let make_shared_deps_css_aux ~dep ~shared_deps =
       shared_deps |> Seq.map (fun shared_dep ->
         sprintf {|
-.deps-direct_dep.%s:hover ~ 
+.deps-direct_dep.%s:hover ~
 .deps-node.deps-layer2_dep.%s {
   fill: #5454ff;
   filter: brightness(1.0) !important;
@@ -799,7 +799,7 @@ svg {
         css :: acc
       ) sharing_stats []
       |> merge_css
-    
+
     let of_assoc ~(sharing_stats:assoc_stats) (graph:assoc_graph) : _ output =
       match graph with
       | [] -> { svg_content = []; svg_attr = []; css = "" }
