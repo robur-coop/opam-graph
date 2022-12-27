@@ -11,8 +11,6 @@ let sprintf = Printf.sprintf
 
 module OSet = OpamPackage.Set
 
-type package = OpamPackage.t
-
 let packages (switch : OpamFile.SwitchExport.t) =
   assert (OSet.cardinal switch.selections.sel_pinned = 0);
   assert (OSet.cardinal switch.selections.sel_compiler = 0);
