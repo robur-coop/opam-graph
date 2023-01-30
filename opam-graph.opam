@@ -15,7 +15,6 @@ depends: [
   "opam-core"
   "opam-format"
   "ocamldot"
-  "rresult"
   "tyxml"
   "gg"
 ]
