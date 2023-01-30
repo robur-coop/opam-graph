@@ -28,5 +28,6 @@ build: [
 
 synopsis: "Graphing dependencies of opam packages"
 description: """
-This package outputs graphs (in svg and dot) of opam packages.
+This package outputs dependency graphs (in svg and dot) of opam package
+universes (opam switch export).
 """
