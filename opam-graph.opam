@@ -1,9 +1,9 @@
 opam-version: "2.0"
 maintainer: "Robur <team@robur.coop>"
 authors: ["Robur <team@robur.coop>"]
-homepage: "https://git.robur.io/robur/opam-graph"
-dev-repo: "git+https://git.robur.io/robur/opam-graph.git"
-bug-reports: "https://github.com/roburio/opam-graph/issues"
+homepage: "https://git.robur.coop/robur/opam-graph"
+dev-repo: "git+https://git.robur.coop/robur/opam-graph.git"
+bug-reports: "https://github.com/robur-coop/opam-graph/issues"
 license: "ISC"
 
 depends: [

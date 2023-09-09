@@ -4,9 +4,9 @@ Section: unknown
 Priority: optional
 Maintainer: Robur Team <team@robur.coop>
 Standards-Version: 4.4.1
-Homepage: https://git.robur.io/robur/opam-graph
-Vcs-Browser: https://git.robur.io/robur/opam-graph
-Vcs-Git: https://git.robur.io/robur/opam-graph.git
+Homepage: https://git.robur.coop/robur/opam-graph
+Vcs-Browser: https://git.robur.coop/robur/opam-graph
+Vcs-Git: https://git.robur.coop/robur/opam-graph.git
 Architecture: FIXME
 Description: Graphing dependencies of opam packages
   This package outputs graphs (in svg and dot) of opam packages.
