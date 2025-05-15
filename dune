@@ -1,0 +1,4 @@
+(install
+ (files README.md)
+ (section doc)
+ (package opam-graph))
